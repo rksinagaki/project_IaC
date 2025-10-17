@@ -7,10 +7,9 @@ import pandas as pd
 from googleapiclient.discovery import build
 from aws_lambda_powertools import Logger
 
+# シークレットを取得する関数
 secretsmanager_client = boto3.client('secretsmanager')
 SECRET_ARN = os.environ.get('YOUTUBE_API_KEY_ARN')
-
-# シークレットを取得する関数
 def get_youtube_api_key(secret_arn):
     response = secretsmanager_client.get_secret_value(SecretId=secret_arn)
     secret_data = json.loads(response['SecretString'])
