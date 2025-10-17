@@ -7,6 +7,15 @@ import pandas as pd
 from googleapiclient.discovery import build
 from aws_lambda_powertools import Logger
 
+secretsmanager_client = boto3.client('secretsmanager')
+SECRET_ARN = os.environ.get('YOUTUBE_API_KEY_ARN')
+
+# シークレットを取得する関数
+def get_youtube_api_key(secret_arn):
+    response = secretsmanager_client.get_secret_value(SecretId=secret_arn)
+    secret_data = json.loads(response['SecretString'])
+    return secret_data['API_KEY']
+
 # /////////////////
 # 環境変数読み込み
 # /////////////////
@@ -14,6 +23,7 @@ from aws_lambda_powertools import Logger
 # API_KEY = os.environ.get("API_KEY")
 BUCKET_NAME = os.environ.get('data_bucket_name')
 REGION_NAME = os.environ.get('region_name')
+API_KEY = get_youtube_api_key(SECRET_ARN)
 
 youtube = build('youtube',
                 'v3',
@@ -24,10 +34,10 @@ logger = Logger()
 # /////////////////
 # チャンネル情報の取得
 # /////////////////
-def get_channel():
+def get_channel(channel_id):
     channels_response = youtube.channels().list(
             part='snippet,statistics',
-            id=CHANNEL_ID
+            id=channel_id
         ).execute()
 
     channel_data = channels_response['items'][0]
@@ -48,10 +58,10 @@ def get_channel():
 # /////////////////
 # 動画情報の取得
 # /////////////////
-def get_video():
+def get_video(channel_id):
     channels_response = youtube.channels().list(
             part='statistics, contentDetails, brandingSettings',
-            id=CHANNEL_ID
+            id=channel_id
         ).execute()
 
     playlist_id = channels_response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
@@ -117,13 +127,6 @@ def get_uploads_playlist_id(channel_id):
 # /////////////////
 # コメント情報の取得
 # /////////////////
-def get_uploads_playlist_id(channel_id):
-    channels_response = youtube.channels().list(
-        part='contentDetails',
-        id=channel_id
-    ).execute()
-    return channels_response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
-
 def get_comments_for_video(video_id, max_comments_per_video=100):
     comments_data = []
     
@@ -168,7 +171,7 @@ def lambda_handler(event, context):
 
     # チャンネルデータの格納
     output_channel = StringIO()
-    df_channel = pd.DataFrame(get_channel())
+    df_channel = pd.DataFrame(get_channel(CHANNEL_ID))
     df_channel.to_json(output_channel, orient='records', lines=True, force_ascii=False)
     channel_key = f'channel={CHANNEL_ID}/workflow={invocation_id}/raw_data/data_channel.json'
     s3.put_object(
@@ -181,7 +184,7 @@ def lambda_handler(event, context):
 
     # ビデオデータの格納
     output_video = StringIO()
-    df_videos = pd.DataFrame(get_video())
+    df_videos = pd.DataFrame(get_video(CHANNEL_ID))
     df_videos.to_json(output_video, orient='records', lines=True, force_ascii=False)
     video_key = f'channel={CHANNEL_ID}/workflow={invocation_id}/raw_data/data_video.json'
     s3.put_object(
