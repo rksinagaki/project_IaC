@@ -87,33 +87,34 @@ resource "aws_iam_role_policy_attachment" "lambda_s3_attach" {
  * EventBridgeの設定
  */
 module "eventbridge" {
-  source = "terraform-aws-modules/eventbridge/aws"
+  source  = "terraform-aws-modules/eventbridge/aws"
+  version = "4.2.1"
   bus_name = "youtube-pipeline-event-scheduler"
 
-  attach_lambda_policy = true
-  lambda_target_arns   = [aws_lambda_function.youtube_lambda_scraper.arn] # my_lambda_functionは後で変更
+  attach_lambda_policy = true
+  lambda_target_arns = [aws_lambda_function.youtube_lambda_scraper.arn]
 
-  schedules = {
-    sukima_schedule = {
-      description         = "Lambda trigger schedule for Channel Sukima-Switch"
-      schedule_expression = "cron(0 6 ? * FRI *)"
-      timezone            = "Asia/Tokyo"
-      arn                 = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
-      input               = jsonencode({
-        channel_id = "UCCPkJMeZHhxKck-EptqQbBA" 
-      })
-    }
+  schedules = {
+    sukima_schedule = {
+      description = "Lambda trigger schedule for Channel Sukima-Switch"
+      schedule_expression = "cron(0 6 ? * FRI *)"
+      timezone = "Asia/Tokyo"
+      arn = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
+      input = jsonencode({
+        channel_id = "UCCPkJMeZHhxKck-EptqQbBA" 
+      })
+    }
 
-    ikimono_schedule = {
-      description         = "Lambda trigger schedule for Channel Ikimono-Gakari"
-      schedule_expression = "cron(0 6 ? * MON *)"
-      timezone            = "Asia/Tokyo"
-      arn                 = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
-      input               = jsonencode({
-        channel_id = "UCflAJoghlGeSkdz5eNIl-sg"
-      })
-    }
-  }
+    ikimono_schedule = {
+      description = "Lambda trigger schedule for Channel Ikimono-Gakari"
+      schedule_expression = "cron(0 6 ? * MON *)"
+      timezone = "Asia/Tokyo"
+      arn = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
+      input = jsonencode({
+        channel_id = "UCflAJoghlGeSkdz5eNIl-sg"
+      })
+    }
+  }
 }
 
 /*
@@ -138,11 +139,11 @@ resource "aws_lambda_function" "youtube_lambda_scraper" {
   
   # dockerイメージのタグはlatestを指定
   image_uri    = "${aws_ecr_repository.lambda_ecr_repository.repository_url}:latest"  
-  role         = aws_iam_role.lambda_execution_role.arn # lambda_execution_roleは後で該当ものに変更
+  role         = aws_iam_role.lambda_execution_role.arn
   
   image_config {
-      command     = ["app_lambda.lambda_handler"] 
-   }
+    command = ["app_lambda.lambda_handler"]
+  }
 
   timeout      = 300 
   memory_size  = 256

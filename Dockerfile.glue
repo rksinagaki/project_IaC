@@ -1,0 +1,11 @@
+FROM public.ecr.aws/glue/aws-glue-libs:5
+
+WORKDIR /home/spark/shared/pyspark
+
+COPY requirements/requirements_pyspark.txt .
+
+RUN pip install --no-cache-dir -r requirements_pyspark.txt
+
+COPY src ./src
+
+CMD ["spark-submit", "src/transformer.py"]
