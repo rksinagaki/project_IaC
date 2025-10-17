@@ -166,7 +166,7 @@ resource "aws_lambda_function" "youtube_lambda_scraper" {
 }
 
 /*
- * Secret managerの定義
+ * Secret managerの定義(API Keyは手動で設定)
  */
 # data blockで現在のアカウントIDを取得
 data "aws_caller_identity" "current" {}
@@ -174,33 +174,37 @@ data "aws_caller_identity" "current" {}
 # 1. Secrets Manager モジュールを使ってシークレットの枠組みとポリシーを作成
 module "youtube_secret" {
   source = "terraform-aws-modules/secrets-manager/aws"
+  version = "2.0.0"
 
   name_prefix             = "project-youtube-youtube-api-key"
   description             = "YouTube Data API Key for data scraper"
   recovery_window_in_days = 14
-
   create_random_password = false 
+  secret_string = jsonencode({
+    API_KEY = "PLACEHOLDER" # 後で手動で入れる
+  })
+  create_policy = false
+}
 
-  # 2. IAMポリシーの作成と設定
-  create_policy = true
-  policy_statements = {
-    read = {
-      sid = "AllowLambdaToReadSecret"
-      principals = [{
-        type        = "AWS"
-        identifiers = [aws_iam_role.lambda_execution_role.arn]
-      }]
-      actions = [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret"
-      ]
-      resources = ["*"]
-    }
-  }
+resource "aws_iam_policy" "lambda_secret_read_policy" {
+  name        = "lambda-secret-read_policy"
+  policy      = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ],
+        Resource = module.youtube_secret.secret_arn
+      }
+    ]
+  })
 }
 
 # secret managerモジュールで作成したポリシーをlambda_execution_roleへアタッチ
 resource "aws_iam_role_policy_attachment" "lambda_secret_read_attach" {
   role       = aws_iam_role.lambda_execution_role.name 
-  policy_arn = module.youtube_secret.secret_policy_arn # .secret_policy_arnは何？
+  policy_arn = aws_iam_policy.lambda_secret_read_policy.arn
 }

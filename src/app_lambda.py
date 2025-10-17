@@ -20,9 +20,10 @@ def get_youtube_api_key(secret_arn):
 # /////////////////
 #CHANNEL_ID = os.environ.get("CHANNEL_ID")
 # API_KEY = os.environ.get("API_KEY")
-BUCKET_NAME = os.environ.get('data_bucket_name')
-REGION_NAME = os.environ.get('region_name')
+BUCKET_NAME = os.environ.get('BUCKET_NAME')
+REGION_NAME = os.environ.get('REGION_NAME')
 API_KEY = get_youtube_api_key(SECRET_ARN)
+print(f"DEBUG: BUCKET_NAME is: {BUCKET_NAME}")
 
 youtube = build('youtube',
                 'v3',
@@ -154,6 +155,7 @@ def get_comments_for_video(video_id, max_comments_per_video=100):
 # lambda関数実行
 # /////////////////
 def lambda_handler(event, context):
+    print(f"ALL ENV: {os.environ}")
     CHANNEL_ID = event.get("CHANNEL_ID")
     
     invocation_id = context.aws_request_id
