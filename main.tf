@@ -5,6 +5,8 @@ resource "aws_s3_bucket" "s3_data_lake_bucket" {
   bucket = var.data_bucket_name
 
   tags = var.project_tags
+
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "s3_data_lake_block" {
@@ -131,6 +133,8 @@ resource "aws_ecr_repository" "lambda_ecr_repository" {
   image_scanning_configuration {
     scan_on_push = true
   }
+
+  force_delete = true
 }
 
 /*
