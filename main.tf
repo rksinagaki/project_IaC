@@ -82,3 +82,36 @@ resource "aws_iam_role_policy_attachment" "lambda_s3_attach" {
   role       = aws_iam_role.lambda_exec_role.name
   policy_arn = aws_iam_policy.lambda_s3_policy.arn
 }
+
+/*
+ * EventBridgeの設定
+ */
+module "eventbridge" {
+  source = "terraform-aws-modules/eventbridge/aws"
+  bus_name = "youtube-pipeline-event-scheduler"
+
+  attach_lambda_policy = true
+  lambda_target_arns   = [aws_lambda_function.my_lambda_function.arn] # my_lambda_functionは後で変更
+
+  schedules = {
+    sukima_schedule = {
+      description         = "Lambda trigger schedule for Channel Sukima-Switch"
+      schedule_expression = "cron(0 6 ? * FRI *)"
+      timezone            = "Asia/Tokyo"
+      arn                 = aws_lambda_function.my_lambda_function.arn # my_lambda_functionは後で変更
+      input               = jsonencode({
+        channel_id = "UCCPkJMeZHhxKck-EptqQbBA" 
+      })
+    }
+
+    ikimono_schedule = {
+      description         = "Lambda trigger schedule for Channel Ikimono-Gakari"
+      schedule_expression = "cron(0 6 ? * MON *)"
+      timezone            = "Asia/Tokyo"
+      arn                 = aws_lambda_function.my_lambda_function.arn # my_lambda_functionは後で変更
+      input               = jsonencode({
+        channel_id = "UCflAJoghlGeSkdz5eNIl-sg"
+      })
+    }
+  }
+}
