@@ -101,7 +101,9 @@ module "eventbridge" {
       timezone = "Asia/Tokyo"
       arn = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
       input = jsonencode({
-        channel_id = "UCCPkJMeZHhxKck-EptqQbBA" 
+        CHANNEL_ID = "UCCPkJMeZHhxKck-EptqQbBA",
+        POWERTOOLS_LOG_LEVEL    = "INFO",
+        POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_sukima-switch"
       })
     }
 
@@ -111,7 +113,9 @@ module "eventbridge" {
       timezone = "Asia/Tokyo"
       arn = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
       input = jsonencode({
-        channel_id = "UCflAJoghlGeSkdz5eNIl-sg"
+        CHANNEL_ID = "UCflAJoghlGeSkdz5eNIl-sg",
+        POWERTOOLS_LOG_LEVEL    = "INFO",
+        POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_ikimono-gakari"
       })
     }
   }
@@ -143,6 +147,13 @@ resource "aws_lambda_function" "youtube_lambda_scraper" {
   
   image_config {
     command = ["app_lambda.lambda_handler"]
+  }
+
+  environment {
+    variables = {
+      BUCKET_NAME = var.data_bucket_name
+      REGION_NAME = var.region_name
+    }
   }
 
   timeout      = 300 

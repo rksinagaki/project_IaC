@@ -12,3 +12,9 @@ variable "project_tags" {
     Environment = "Dev"
   }
 }
+
+variable "region_name" {
+  description = "AWSリージョン名"
+  type        = string
+  default     = "ap-northeast-1"
+}
