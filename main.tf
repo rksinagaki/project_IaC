@@ -18,7 +18,7 @@ resource "aws_s3_bucket_public_access_block" "s3_data_lake_block" {
 /*
  * YouTubeAPI実行lambdaの信頼関係の設定(roleの作成)
  */
-resource "aws_iam_role" "lambda_exec_role" {
+resource "aws_iam_role" "lambda_execution_role" {
   name = "youtube-pipeline-lambda-role"
   
   assume_role_policy = jsonencode({
@@ -79,7 +79,7 @@ resource "aws_iam_policy" "lambda_s3_policy" {
  * ロールとポリシーの紐づけ
  */
 resource "aws_iam_role_policy_attachment" "lambda_s3_attach" {
-  role       = aws_iam_role.lambda_exec_role.name
+  role       = aws_iam_role.lambda_execution_role.name
   policy_arn = aws_iam_policy.lambda_s3_policy.arn
 }
 
@@ -91,14 +91,14 @@ module "eventbridge" {
   bus_name = "youtube-pipeline-event-scheduler"
 
   attach_lambda_policy = true
-  lambda_target_arns   = [aws_lambda_function.my_lambda_function.arn] # my_lambda_functionは後で変更
+  lambda_target_arns   = [aws_lambda_function.youtube_lambda_scraper.arn] # my_lambda_functionは後で変更
 
   schedules = {
     sukima_schedule = {
       description         = "Lambda trigger schedule for Channel Sukima-Switch"
       schedule_expression = "cron(0 6 ? * FRI *)"
       timezone            = "Asia/Tokyo"
-      arn                 = aws_lambda_function.my_lambda_function.arn # my_lambda_functionは後で変更
+      arn                 = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
       input               = jsonencode({
         channel_id = "UCCPkJMeZHhxKck-EptqQbBA" 
       })
@@ -108,10 +108,46 @@ module "eventbridge" {
       description         = "Lambda trigger schedule for Channel Ikimono-Gakari"
       schedule_expression = "cron(0 6 ? * MON *)"
       timezone            = "Asia/Tokyo"
-      arn                 = aws_lambda_function.my_lambda_function.arn # my_lambda_functionは後で変更
+      arn                 = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
       input               = jsonencode({
         channel_id = "UCflAJoghlGeSkdz5eNIl-sg"
       })
     }
   }
+}
+
+/*
+ * awsリポジトリ(ECR)の定義
+ */
+resource "aws_ecr_repository" "lambda_ecr_repository" {
+  name                 = "youtube-lambda-scraper-repository"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+/*
+ * Lambdaの定義
+ */
+resource "aws_lambda_function" "youtube_lambda_scraper" {
+  function_name = "youtube-data-scraper"
+  description   = "Scrape youtube data with Google API."
+  package_type = "Image"
+  
+  # dockerイメージのタグはlatestを指定
+  image_uri    = "${aws_ecr_repository.lambda_ecr_repository.repository_url}:latest"  
+  role         = aws_iam_role.lambda_execution_role.arn # lambda_execution_roleは後で該当ものに変更
+  
+  image_config {
+      command     = ["app_lambda.lambda_handler"] 
+   }
+
+  timeout      = 300 
+  memory_size  = 256
+  
+  depends_on = [
+    aws_ecr_repository.lambda_ecr_repository,
+  ]
 }
