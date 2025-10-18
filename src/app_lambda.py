@@ -1,4 +1,3 @@
-import logging
 import json
 import os
 from io import StringIO
@@ -21,6 +20,8 @@ def get_youtube_api_key(secret_arn):
 BUCKET_NAME = os.environ.get('BUCKET_NAME')
 REGION_NAME = os.environ.get('REGION_NAME')
 API_KEY = get_youtube_api_key(SECRET_ARN)
+EVENT_SOURCE = 'my-scraper' # 後で変更
+EVENT_DETAIL_TYPE = 'ScrapingCompleted' # 後で変更
 
 youtube = build('youtube',
                 'v3',
@@ -153,13 +154,9 @@ def get_comments_for_video(video_id, max_comments_per_video=100):
 # /////////////////
 def lambda_handler(event, context):
     CHANNEL_ID = event.get("CHANNEL_ID")
-    
-    invocation_id = context.aws_request_id
-    logger.set_correlation_id(invocation_id)
-
-    # current_execution_id = logger.get_correlation_id() 
-    # if not current_execution_id:
-    #     current_execution_id = context.aws_request_id
+    service_name = event.get("POWERTOOLS_SERVICE_NAME", "default_service")
+    logger = Logger(service=service_name)
+    current_execution_id = logger.get_correlation_id()
 
     logger.info("Lambdaハンドラー処理を開始します。")
 
@@ -170,7 +167,7 @@ def lambda_handler(event, context):
     output_channel = StringIO()
     df_channel = pd.DataFrame(get_channel(CHANNEL_ID))
     df_channel.to_json(output_channel, orient='records', lines=True, force_ascii=False)
-    channel_key = f'channel={CHANNEL_ID}/workflow={invocation_id}/raw_data/data_channel.json'
+    channel_key = f'channel={CHANNEL_ID}/workflow={current_execution_id}/raw_data/data_channel.json'
     s3.put_object(
         Bucket=BUCKET_NAME,
         Key=channel_key,
@@ -183,7 +180,7 @@ def lambda_handler(event, context):
     output_video = StringIO()
     df_videos = pd.DataFrame(get_video(CHANNEL_ID))
     df_videos.to_json(output_video, orient='records', lines=True, force_ascii=False)
-    video_key = f'channel={CHANNEL_ID}/workflow={invocation_id}/raw_data/data_video.json'
+    video_key = f'channel={CHANNEL_ID}/workflow={current_execution_id}/raw_data/data_video.json'
     s3.put_object(
         Bucket=BUCKET_NAME,
         Key=video_key,
@@ -205,7 +202,7 @@ def lambda_handler(event, context):
     output_comment = StringIO()
     df_comments = pd.DataFrame(all_comments)
     df_comments.to_json(output_comment, orient='records', lines=True, force_ascii=False)
-    comment_key = f'channel={CHANNEL_ID}/workflow={invocation_id}/raw_data/data_comment.json'
+    comment_key = f'channel={CHANNEL_ID}/workflow={current_execution_id}/raw_data/data_comment.json'
     s3.put_object(
         Bucket=BUCKET_NAME,
         Key=comment_key,
@@ -216,13 +213,42 @@ def lambda_handler(event, context):
     
     logger.info("lambdaハンドラーが完了しました。")
 
+    data_to_pass_to_sfn = {
+        "statusCode": 200,
+        "bucket_name": BUCKET_NAME, 
+        "input_keys": [
+            f"s3://{BUCKET_NAME}/{channel_key}",
+            f"s3://{BUCKET_NAME}/{video_key}",
+            f"s3://{BUCKET_NAME}/{comment_key}"
+        ],
+        "correlation_id": current_execution_id
+    }
+
+    events_client = boto3.client('events')
+    response = events_client.put_events(
+        Entries=[
+            {
+                'Source': EVENT_SOURCE,          
+                'DetailType': EVENT_DETAIL_TYPE, 
+                # SFNに渡すデータをJSON文字列として 'Detail' に含める
+                'Detail': json.dumps(data_to_pass_to_sfn), 
+                'EventBusName': 'default' 
+            }
+        ]
+    )
+
+    # return {
+    #     "statusCode": 200,
+    #     "bucket_name": BUCKET_NAME, 
+    #     "input_keys": [
+    #         f"s3://{BUCKET_NAME}/{channel_key}",
+    #         f"s3://{BUCKET_NAME}/{video_key}",
+    #         f"s3://{BUCKET_NAME}/{comment_key}"
+    #     ],
+    #     "correlation_id": current_execution_id 
+    # }
+
     return {
-            "statusCode": 200,
-            "bucket_name": BUCKET_NAME, 
-            "input_keys": [
-                f"s3://{BUCKET_NAME}/{channel_key}",
-                f"s3://{BUCKET_NAME}/{video_key}",
-                f"s3://{BUCKET_NAME}/{comment_key}"
-            ],
-            "correlation_id": invocation_id 
-        }
+        "statusCode": 200,
+        'message': 'Scraping and event publication complete.'
+    }

@@ -207,8 +207,150 @@ resource "aws_iam_policy" "lambda_secret_read_policy" {
   })
 }
 
-# secret managerモジュールで作成したポリシーをlambda_execution_roleへアタッチ
+# 作成したlambda_secret_read_policyをlambda_execution_roleへアタッチ
 resource "aws_iam_role_policy_attachment" "lambda_secret_read_attach" {
   role       = aws_iam_role.lambda_execution_role.name 
   policy_arn = aws_iam_policy.lambda_secret_read_policy.arn
+}
+
+/*
+ * Glueジョブを仮で定義
+ */
+locals {
+  glue_job_name = "youtube-transformer-job" 
+  glue_job_arn  = "arn:aws:glue:${var.region_name}:${data.aws_caller_identity.current.account_id}:job/${local.glue_job_name}"
+}
+
+/*
+ * SFNの定義
+ */
+# SFNの定義に必要なIAMロール
+resource "aws_iam_role" "sfn_glue_execution_role" {
+  name = "sfn-glue-execution-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "states.amazonaws.com" }
+    }]
+  })
+}
+
+module "step_function" {
+  source  = "terraform-aws-modules/step-functions/aws"
+  version = "5.0.1"
+
+  name       = "youtube-glue-workflow"
+  type = "STANDARD"
+  # 後で変更
+  definition = <<EOF
+{
+  "Comment": "Start AWS Glue Job synchronously using S3 key from Lambda input.",
+  "StartAt": "RunGlueJob",
+  "States": {
+    "RunGlueJob": {
+      "Type": "Task",
+      # Glueジョブを同期的に実行するためのリソースARN
+      "Resource": "arn:aws:states:::glue:startJobRun.sync", 
+      "Parameters": {
+        "JobName": "${local.glue_job_name}",
+        "Arguments": {
+          # ★★★ Lambda/EventBridgeから渡された入力JSONからS3キーを取得 ★★★
+          # 入力JSONの $.s3_raw_data_key の値をGlueジョブの引数 --S3_KEY に設定
+          "--S3_KEY.$": "$.s3_raw_data_key" 
+        }
+      },
+      "Catch": [
+        {
+          "ErrorEquals": ["States.All"],
+          "Next": "HandleFailure"
+        }
+      ],
+      "End": true
+    },
+    "HandleFailure": {
+      "Type": "Fail",
+      "Cause": "Glue Job failed to run."
+    }
+  }
+}
+EOF
+  service_integrations = {
+    glue_job = {
+      glue = [local.glue_job_arn] 
+    }
+  }
+
+  tags = var.project_tags
+}
+
+
+/*
+ * Lambda、SFN間のEventBridgeの定義
+ */
+locals {
+  # EventBridgeがSFNに渡すための入力トランスフォーマーを定義
+  sfn_input_transformer = {
+    input_paths = {
+      lambda_output = "$.detail"
+    }
+    input_template = "<lambda_output>"
+  }
+}
+
+module "eventbridge" {
+  source = "terraform-aws-modules/eventbridge/aws"
+  version = "4.2.1"
+  
+  # デフォルトのイベントバスを使用
+  bus_name = "bridge-lambda-and-statemachine" 
+
+  # 1. ルールの定義: Lambdaが発行するカスタムイベントを捕捉
+  rules = {
+    order = {
+      description = "Lambdaのスクレイピング完了イベントを捕捉"
+      event_pattern = jsonencode({ 
+        "source" : ["my-scraper"],            # LambdaでPutEventsするSourceと一致
+        "detail-type": ["ScrapingCompleted"]  # LambdaでPutEventsするDetailTypeと一致
+      })
+      enabled = true
+    }
+  }
+
+  # 2. ターゲットの定義: 捕捉したイベントをSFNにルーティング
+  targets = {
+    order = [
+      {
+        name              = "start-sfn-workflow"
+        arn               = module.step_function.state_machine_arn
+        input_transformer = local.sfn_input_transformer
+      }
+    ]
+  }
+
+  tags = var.project_tags
+}
+
+# LambdaのEventBridgeへの書き込みポリシー
+resource "aws_iam_policy" "eventbridge_put_events_policy" {
+  name        = "eventbridge-put-events-policy"
+  description = "Allows Lambda to put custom events to EventBridge."
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = "events:PutEvents"
+        Effect   = "Allow"
+        Resource = "*"
+      },
+    ]
+  })
+}
+
+# Lambda実行ロールへのポリシーのアタッチ
+resource "aws_iam_role_policy_attachment" "lambda_eventbridge_attach" {
+  # 既存のLambda実行ロールIDに置き換えてください
+  role       = aws_iam_role.lambda_execution_role.name
+  policy_arn = aws_iam_policy.eventbridge_put_events_policy.arn
 }
