@@ -91,36 +91,98 @@ resource "aws_iam_role_policy_attachment" "lambda_s3_attach" {
 module "eventbridge" {
   source  = "terraform-aws-modules/eventbridge/aws"
   version = "4.2.1"
-  bus_name = "youtube-pipeline-event-scheduler"
 
-  attach_lambda_policy = true
-  lambda_target_arns = [aws_lambda_function.youtube_lambda_scraper.arn]
+  bus_name = "youtube-pipeline-event-bus" 
+
+  # ----------------------------------------------------
+  # A. スケジュールベースの Lambda 実行設定 (最初のブロックの内容)
+  # ----------------------------------------------------  
+  # Lambdaへの実行権限をモジュールに自動で設定させる
+  attach_lambda_policy = true 
+  lambda_target_arns   = [aws_lambda_function.youtube_lambda_scraper.arn]
 
   schedules = {
     sukima_schedule = {
-      description = "Lambda trigger schedule for Channel Sukima-Switch"
+      description         = "Lambda trigger schedule for Channel Sukima-Switch"
       schedule_expression = "cron(0 6 ? * FRI *)"
-      timezone = "Asia/Tokyo"
-      arn = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
+      timezone            = "Asia/Tokyo"
+      arn                 = aws_lambda_function.youtube_lambda_scraper.arn 
       input = jsonencode({
-        CHANNEL_ID = "UCCPkJMeZHhxKck-EptqQbBA",
+        CHANNEL_ID              = "UCCPkJMeZHhxKck-EptqQbBA",
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_sukima-switch"
       })
     }
-
     ikimono_schedule = {
-      description = "Lambda trigger schedule for Channel Ikimono-Gakari"
+      description         = "Lambda trigger schedule for Channel Ikimono-Gakari"
       schedule_expression = "cron(0 6 ? * MON *)"
-      timezone = "Asia/Tokyo"
-      arn = aws_lambda_function.youtube_lambda_scraper.arn # my_lambda_functionは後で変更
+      timezone            = "Asia/Tokyo"
+      arn                 = aws_lambda_function.youtube_lambda_scraper.arn 
       input = jsonencode({
-        CHANNEL_ID = "UCflAJoghlGeSkdz5eNIl-sg",
+        CHANNEL_ID              = "UCflAJoghlGeSkdz5eNIl-sg",
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_ikimono-gakari"
       })
     }
   }
+  # ----------------------------------------------------
+  # B. イベントパターンベースの SFN 起動設定 (2つ目のブロックの内容)
+  # ----------------------------------------------------
+  rules = {
+    scraper_completed_event = { # 名前を区別しやすいように変更
+      description = "Lambdaのスクレイピング完了イベントを捕捉し、SFNを起動"
+      event_pattern = jsonencode({ 
+        "source" : ["my-scraper"],            
+        "detail-type": ["ScrapingCompleted"]
+      })
+      enabled = true
+    }
+  }
+
+  targets = {
+    scraper_completed_event = [ # ルール名とキー名を一致させる
+      {
+        name              = "start-sfn-workflow"
+        arn               = module.step-function.state_machine_arn # SFNのARNを参照
+        role_arn          = aws_iam_role.eventbridge_invoke_sfn.arn
+        input_transformer = local.sfn_input_transformer
+      }
+    ]
+  }
+  # attach_sfn_policy = true
+  # sfn_target_arns   = [module.step-function.state_machine_arn]
+
+  tags = var.project_tags
+}
+
+resource "aws_iam_role" "eventbridge_invoke_sfn" {
+  name = "eventbridge-invoke-sfn-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Service = "events.amazonaws.com"
+      },
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_invoke_sfn_policy" {
+  role = aws_iam_role.eventbridge_invoke_sfn.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Action = [
+        "states:StartExecution"
+      ],
+      Resource = module.step-function.state_machine_arn
+    }]
+  })
 }
 
 /*
@@ -237,7 +299,7 @@ resource "aws_iam_role" "sfn_glue_execution_role" {
   })
 }
 
-module "step_function" {
+module "step-function" {
   source  = "terraform-aws-modules/step-functions/aws"
   version = "5.0.1"
 
@@ -251,13 +313,10 @@ module "step_function" {
   "States": {
     "RunGlueJob": {
       "Type": "Task",
-      # Glueジョブを同期的に実行するためのリソースARN
       "Resource": "arn:aws:states:::glue:startJobRun.sync", 
       "Parameters": {
         "JobName": "${local.glue_job_name}",
         "Arguments": {
-          # ★★★ Lambda/EventBridgeから渡された入力JSONからS3キーを取得 ★★★
-          # 入力JSONの $.s3_raw_data_key の値をGlueジョブの引数 --S3_KEY に設定
           "--S3_KEY.$": "$.s3_raw_data_key" 
         }
       },
@@ -277,7 +336,7 @@ module "step_function" {
 }
 EOF
   service_integrations = {
-    glue_job = {
+    glue_Sync = {
       glue = [local.glue_job_arn] 
     }
   }
@@ -297,39 +356,6 @@ locals {
     }
     input_template = "<lambda_output>"
   }
-}
-
-module "eventbridge" {
-  source = "terraform-aws-modules/eventbridge/aws"
-  version = "4.2.1"
-  
-  # デフォルトのイベントバスを使用
-  bus_name = "bridge-lambda-and-statemachine" 
-
-  # 1. ルールの定義: Lambdaが発行するカスタムイベントを捕捉
-  rules = {
-    order = {
-      description = "Lambdaのスクレイピング完了イベントを捕捉"
-      event_pattern = jsonencode({ 
-        "source" : ["my-scraper"],            # LambdaでPutEventsするSourceと一致
-        "detail-type": ["ScrapingCompleted"]  # LambdaでPutEventsするDetailTypeと一致
-      })
-      enabled = true
-    }
-  }
-
-  # 2. ターゲットの定義: 捕捉したイベントをSFNにルーティング
-  targets = {
-    order = [
-      {
-        name              = "start-sfn-workflow"
-        arn               = module.step_function.state_machine_arn
-        input_transformer = local.sfn_input_transformer
-      }
-    ]
-  }
-
-  tags = var.project_tags
 }
 
 # LambdaのEventBridgeへの書き込みポリシー
