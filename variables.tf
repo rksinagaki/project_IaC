@@ -18,3 +18,9 @@ variable "region_name" {
   type        = string
   default     = "ap-northeast-1"
 }
+
+variable "script_bucket_name" {
+  description = "Glueジョブのスクリプト保存用S3バケット名"
+  type        = string
+  default     = "youtube-glue-job-script-1016" 
+}

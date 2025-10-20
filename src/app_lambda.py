@@ -244,6 +244,11 @@ def lambda_handler(event, context):
         ]
     )
 
+    return {
+        "statusCode": 200,
+        'message': 'Scraping and event publication complete.'
+    }
+
     # return {
     #     "statusCode": 200,
     #     "bucket_name": BUCKET_NAME, 
@@ -254,8 +259,3 @@ def lambda_handler(event, context):
     #     ],
     #     "correlation_id": current_execution_id 
     # }
-
-    return {
-        "statusCode": 200,
-        'message': 'Scraping and event publication complete.'
-    }

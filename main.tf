@@ -208,31 +208,34 @@ module "step-function" {
   # 後で変更
   definition = <<EOF
 {
-  "Comment": "Start AWS Glue Job synchronously using S3 key from Lambda input.",
-  "StartAt": "RunGlueJob",
+  "Comment": "A description of my state machine",
+  "StartAt": "Glue StartJobRun",
   "States": {
-    "RunGlueJob": {
+    "Glue StartJobRun": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::glue:startJobRun.sync", 
+      "Resource": "arn:aws:states:::glue:startJobRun",
       "Parameters": {
-        "JobName": "${local.glue_job_name}",
-        "Arguments": {
-          "--S3_KEY.$": "$.s3_raw_data_key" 
-        }
+        "JobName": "${local.glue_job_name}"
       },
       "Catch": [
         {
-          "ErrorEquals": ["States.All"],
-          "Next": "HandleFailure"
+          "ErrorEquals": [],
+          "Next": "SNS Publish"
         }
       ],
       "End": true
     },
-    "HandleFailure": {
-      "Type": "Fail",
-      "Cause": "Glue Job failed to run."
+    "SNS Publish": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "Message.$": "$"
+      },
+      "End": true
     }
-  }
+  },
+  "QueryLanguage": "JSONPath",
+  "TimeoutSeconds": 600
 }
 EOF
   service_integrations = {
@@ -347,4 +350,129 @@ module "eventbridge" {
   }
 
   tags = var.project_tags
+}
+
+/*
+ * Glueジョブスクリプト保存用のS3バケットの作成
+ */
+resource "aws_s3_bucket" "s3_glue_script_bucket" {
+  bucket = var.script_bucket_name
+  tags = var.project_tags
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_public_access_block" "s3_glue_script_block" {
+  bucket                  = aws_s3_bucket.s3_glue_script_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+/*
+ * Glueの設定
+ */
+# BQの認証キーをSecretMangerへ設定（後で手動で入力）
+module "bigquery_secret" {
+  source = "terraform-aws-modules/secrets-manager/aws"
+  version = "2.0.0"
+
+  name_prefix             = "project-youtube-bigquery-secret-key"
+  description             = "BigQuery service account key for project-youtube"
+  recovery_window_in_days = 14
+  create_random_password = false 
+  secret_string = jsonencode({
+    "type": "PLACEHOLDER",
+    "project_id": "PLACEHOLDER",
+    "private_key_id": "PLACEHOLDER",
+    "private_key": "PLACEHOLDER",
+    "client_email": "PLACEHOLDER",
+    "client_id": "PLACEHOLDER",
+    "auth_uri": "PLACEHOLDER",
+    "token_uri": "PLACEHOLDER",
+    "auth_provider_x509_cert_url": "PLACEHOLDER",
+    "client_x509_cert_url": "PLACEHOLDER",
+    "universe_domain": "PLACEHOLDER"
+  })
+  create_policy = false #　後で作る
+}
+
+# Glue Connectionを定義
+resource "aws_glue_connection" "bigquery_connection" {
+  name            = "bigquery-connector-spark-connection"
+  description     = "AWS Glue BigQuery Connection using SparkProperties."
+  
+  connection_type = "BIGQUERY" 
+
+  connection_properties = {
+    SparkProperties = jsonencode({
+      secretId = module.bigquery_secret.name
+    })
+  }
+}
+
+# GlueのIAMロールの定義
+resource "aws_iam_role" "glue_job_execution_role" {
+  name_prefix        = "glue-youtube-job-role"
+  description        = "IAM role for AWS Glue Job to access S3, Secrets Manager, and Data Catalog."
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = {
+          Service = "glue.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# Glueジョブのポリシー設定
+resource "aws_iam_policy" "glue_combined_policy" {
+  name_prefix = "glue-youtube-job-combined-policy"
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # 1. RestrictedAccess (S3/Secrets Manager)
+      {
+        Sid    = "RestrictedAccess",
+        Effect = "Allow",
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "s3:ListBucket",
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ],
+        Resource = [
+          module.bigquery_secret.arn, 
+          aws_s3_bucket.s3_data_lake_bucket.arn,
+          "${aws_s3_bucket.s3_data_lake_bucket.arn}/*",
+          aws_s3_bucket.s3_glue_script_bucket.arn,
+          "${aws_s3_bucket.s3_glue_script_bucket.arn}/*"
+        ]
+      },
+      # 2. BroadAccess (Glue/Logs/PassRole)
+      {
+        Sid    = "BroadAccess",
+        Effect = "Allow",
+        Action = [
+          "glue:*",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "iam:PassRole"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "combined_attach" {
+  role       = aws_iam_role.glue_job_execution_role.name
+  policy_arn = aws_iam_policy.glue_combined_policy.arn
 }
