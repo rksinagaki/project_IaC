@@ -127,26 +127,33 @@ def get_uploads_playlist_id(channel_id):
 # /////////////////
 def get_comments_for_video(video_id, max_comments_per_video=100):
     comments_data = []
-    
-    comment_threads_response = youtube.commentThreads().list(
-        part='snippet',
-        videoId=video_id,
-        maxResults=min(100, max_comments_per_video),
-        pageToken=None,
-        order='relevance'
-    ).execute()
+    # コメント無効か動画対策
+    try:
+        comment_threads_response = youtube.commentThreads().list(
+            part='snippet',
+            videoId=video_id,
+            maxResults=min(100, max_comments_per_video),
+            pageToken=None,
+            order='relevance'
+        ).execute()
 
-    for item in comment_threads_response['items']:
-        comment = item['snippet']['topLevelComment']['snippet']
-        comments_data.append({
-            'video_id': video_id,
-            'comment_id': item['id'],
-            'author_display_name': comment['authorDisplayName'],
-            'published_at': comment['publishedAt'],
-            'text_display': comment['textDisplay'],
-            'like_count': comment['likeCount']
-        })
+        for item in comment_threads_response['items']:
+            comment = item['snippet']['topLevelComment']['snippet']
+            comments_data.append({
+                'video_id': video_id,
+                'comment_id': item['id'],
+                'author_display_name': comment['authorDisplayName'],
+                'published_at': comment['publishedAt'],
+                'text_display': comment['textDisplay'],
+                'like_count': comment['likeCount']
+            })
     
+    except Exception as e:
+        if e.resp.status == 403 and "commentsDisabled" in str(e):
+            print(f"コメントが無効な動画: {video_id}")
+        else:
+            print(f"コメント取得失敗: {video_id} - {e}")
+
     return comments_data
 
 # /////////////////
