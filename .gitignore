@@ -1,4 +1,11 @@
 __pycache__/
 .env
+
 .terraform/
 *.tfplan
+*.tfstate
+*.tfstate.*
+.terraformrc
+crash.log
+
+terraform.tfvars

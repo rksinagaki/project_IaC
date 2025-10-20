@@ -24,3 +24,8 @@ variable "script_bucket_name" {
   type        = string
   default     = "youtube-glue-job-script-1016" 
 }
+
+variable "alert_email_endpoint" {
+  description = "SNSアラートの通知先となるEメールアドレス"
+  type        = string
+}

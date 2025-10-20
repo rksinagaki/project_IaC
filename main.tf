@@ -3,9 +3,7 @@
  */
 resource "aws_s3_bucket" "s3_data_lake_bucket" {
   bucket = var.data_bucket_name
-
   tags = var.project_tags
-
   force_destroy = true
 }
 
@@ -18,7 +16,7 @@ resource "aws_s3_bucket_public_access_block" "s3_data_lake_block" {
 }
 
 /*
- * YouTubeAPI実行lambdaの信頼関係の設定(roleの作成)
+ * Lambdaのassume role作成
  */
 resource "aws_iam_role" "lambda_execution_role" {
   name = "youtube-pipeline-lambda-role"
@@ -176,14 +174,6 @@ resource "aws_iam_role_policy_attachment" "lambda_secret_read_attach" {
 }
 
 /*
- * Glueジョブを仮で定義
- */
-locals {
-  glue_job_name = "youtube-transformer-job" 
-  glue_job_arn  = "arn:aws:glue:${var.region_name}:${data.aws_caller_identity.current.account_id}:job/${local.glue_job_name}"
-}
-
-/*
  * SFNの定義
  */
 # SFNの定義に必要なIAMロール
@@ -220,7 +210,6 @@ module "step-function" {
       "Catch": [
         {
           "ErrorEquals": [
-            "States.TaskFailed",
             "States.ALL"
           ],
           "Next": "SNS Publish"
@@ -243,7 +232,7 @@ module "step-function" {
 EOF
   service_integrations = {
     glue_Sync = {
-      glue = [local.glue_job_arn] 
+      glue = [aws_glue_job.youtube_data_processing_job.arn]
     }
   }
 
@@ -514,26 +503,21 @@ resource "aws_glue_job" "youtube_data_processing_job" {
   }
 }
 
-# ローカルとGlueをつなげてScriptを自動でデプロイする
-# resource "aws_s3_object" "glue_etl_script" {
-#   bucket = aws_s3_bucket.s3_glue_script_bucket.id
-#   key    = "jobs/youtube_processor.py"
-#   source = "jobs/youtube_processor.py" # ⚠ ローカルの 'jobs/youtube_processor.py' が存在すること
-# }
-
 resource "aws_sns_topic" "sns_alert_sfn_workflow" {
   name = "youtube-etl-alert-topic" 
 }
 
-
 /*
  * SNSの定義
  */
-module "sns" {
-  source  = "terraform-aws-modules/sns/aws"
-  version = "6.2.0"
+ # トピックの定義
+resource "aws_sns_topic" "alert_topic_sfn" {
+  name = "youtube-etl-alert-topic" 
+}
 
-  name = "youtube-etl-alert-topic"
-
-  tags = var.project_tags
+# Eメールサブスクリプションの定義
+resource "aws_sns_topic_subscription" "alert_email_subscription" {
+  topic_arn = aws_sns_topic.alert_topic_sfn.arn 
+  protocol  = "email"
+  endpoint  = var.alert_email_endpoint 
 }
