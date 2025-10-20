@@ -215,11 +215,14 @@ module "step-function" {
       "Type": "Task",
       "Resource": "arn:aws:states:::glue:startJobRun",
       "Parameters": {
-        "JobName": "${local.glue_job_name}"
+        "JobName": "${aws_glue_job.youtube_data_processing_job.name}"
       },
       "Catch": [
         {
-          "ErrorEquals": [],
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "States.ALL"
+          ],
           "Next": "SNS Publish"
         }
       ],
@@ -372,7 +375,7 @@ resource "aws_s3_bucket_public_access_block" "s3_glue_script_block" {
 /*
  * Glueの設定
  */
-# BQの認証キーをSecretMangerへ設定（後で手動で入力）
+# glueが使用するBQの認証キーをSecretMangerへ設定（後で手動で入力）
 module "bigquery_secret" {
   source = "terraform-aws-modules/secrets-manager/aws"
   version = "2.0.0"
@@ -406,7 +409,7 @@ resource "aws_glue_connection" "bigquery_connection" {
 
   connection_properties = {
     SparkProperties = jsonencode({
-      secretId = module.bigquery_secret.name
+      secretId = module.bigquery_secret.secret_name
     })
   }
 }
@@ -436,7 +439,6 @@ resource "aws_iam_policy" "glue_combined_policy" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # 1. RestrictedAccess (S3/Secrets Manager)
       {
         Sid    = "RestrictedAccess",
         Effect = "Allow",
@@ -448,14 +450,14 @@ resource "aws_iam_policy" "glue_combined_policy" {
           "s3:DeleteObject"
         ],
         Resource = [
-          module.bigquery_secret.arn, 
+          module.bigquery_secret.secret_arn, 
           aws_s3_bucket.s3_data_lake_bucket.arn,
           "${aws_s3_bucket.s3_data_lake_bucket.arn}/*",
           aws_s3_bucket.s3_glue_script_bucket.arn,
           "${aws_s3_bucket.s3_glue_script_bucket.arn}/*"
         ]
       },
-      # 2. BroadAccess (Glue/Logs/PassRole)
+
       {
         Sid    = "BroadAccess",
         Effect = "Allow",
@@ -475,4 +477,63 @@ resource "aws_iam_policy" "glue_combined_policy" {
 resource "aws_iam_role_policy_attachment" "combined_attach" {
   role       = aws_iam_role.glue_job_execution_role.name
   policy_arn = aws_iam_policy.glue_combined_policy.arn
+}
+
+# Glueジョブの定義
+resource "aws_glue_job" "youtube_data_processing_job" {
+  name             = "youtube-data-processing-job"
+  description      = "Processes YouTube raw data and loads to the Data Catalog using BigQuery Connection."
+  role_arn         = aws_iam_role.glue_job_execution_role.arn 
+  glue_version     = "5.0"
+  max_retries      = 0
+  timeout          = 20
+  number_of_workers = 2
+  worker_type      = "G.1X"
+  
+  connections      = [aws_glue_connection.bigquery_connection.name]
+  execution_class  = "STANDARD"
+
+  command {
+    script_location = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/jobs/youtube_processor.py"
+    name            = "glueetl"
+    python_version  = "3"
+  }
+  
+  # Spark UI LogsとTemporary Pathの設定を追加
+  default_arguments = {
+    "--TempDir"                 = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/tmp/"
+    "--spark-ui-log-path"       = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/logs/spark-ui/"
+    "--enable-spark-ui"         = "true"
+    
+    "--job-language"            = "python"
+    "--continuous-log-logGroup" = "/aws-glue/jobs"
+    "--enable-continuous-cloudwatch-log" = "true"
+    "--enable-continuous-log-filter"     = "true"
+    "--enable-metrics"          = "true"
+    "--enable-auto-scaling"     = "true"
+  }
+}
+
+# ローカルとGlueをつなげてScriptを自動でデプロイする
+# resource "aws_s3_object" "glue_etl_script" {
+#   bucket = aws_s3_bucket.s3_glue_script_bucket.id
+#   key    = "jobs/youtube_processor.py"
+#   source = "jobs/youtube_processor.py" # ⚠ ローカルの 'jobs/youtube_processor.py' が存在すること
+# }
+
+resource "aws_sns_topic" "sns_alert_sfn_workflow" {
+  name = "youtube-etl-alert-topic" 
+}
+
+
+/*
+ * SNSの定義
+ */
+module "sns" {
+  source  = "terraform-aws-modules/sns/aws"
+  version = "6.2.0"
+
+  name = "youtube-etl-alert-topic"
+
+  tags = var.project_tags
 }
