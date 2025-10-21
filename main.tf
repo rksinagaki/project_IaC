@@ -512,6 +512,23 @@ resource "aws_sns_topic" "sns_alert_sfn_workflow" {
 }
 
 /*
+ * クローラーとデータカタログの定義
+ */
+resource "aws_glue_catalog_database" "crawler_db" {
+  name = var.glue_database_name
+}
+
+resource "aws_glue_crawler" "youtube_processed_data_crawler" {
+  database_name = aws_glue_catalog_database.crawler_db.name
+  name          = "youtube_processed_data_crawler"
+  role          = # 後で記入
+
+  s3_target {
+    path = "s3://${var.data_bucket_name}"
+  }
+}
+
+/*
  * SNSの定義
  */
  # トピックの定義

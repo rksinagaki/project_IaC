@@ -40,3 +40,9 @@ variable "gcp_region" {
   type        = string
   default     = "asia-northeast1"
 }
+
+variable "glue_database_name" {
+  description = "Glue Catalogで利用するデータベース名"
+  type        = string
+  default     = "youtube_analysis_db" 
+}

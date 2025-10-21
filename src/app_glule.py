@@ -24,9 +24,13 @@ args = getResolvedOptions(sys.argv, [
     's3_input_path_comment', # 動的
     'processed_base_path', # 動的
     'report_base_path', # 動的
+    'artist_name_slug' # 動的
     'correlation_id',
 
-    'crawler_name'# 静的
+    'crawler_name',# 静的
+    'gcp_project_id',
+    'bq_dataset',
+    'bq_table'
 ])
 
 sc = SparkContext()
@@ -46,9 +50,12 @@ S3_INPUT_PATH_VIDEO = args['s3_input_path_video']
 S3_INPUT_PATH_COMMENT = args['s3_input_path_comment']
 PROCESSED_BASE_PATH = args['processed_base_path']
 REPORT_BASE_PATH = args['report_base_path']
+ARTIST_NAME_SLUG = args['artist_name_slug']
 
 CRAWLER_NAME = args['crawler_name']
 CORRELATION_ID = args['correlation_id']
+GCP_PROJECT_ID = args['gcp_project_id']
+BQ_DATASET = args['bq_dataset']
 
 # ////////////
 # ロガー関数
@@ -279,36 +286,65 @@ log_json("S3へデータの格納が完了しました。")
 # ////////////
 # BigQueryへデータの格納
 # ////////////
+# BQへチャンネルデータの格納
 dynamic_channel = DynamicFrame.fromDF(df_channel, glueContext, "converted_frame")
 
 glueContext.write_dynamic_frame.from_options(
     frame=dynamic_channel,
     connection_type="bigquery",
     connection_options={
-        "connectionName": "Glue-Connection-For-BigQuery",
+        "connectionName": "bigquery-connector-spark-connection",
         "parentProject": GCP_PROJECT_ID,
         "writeMethod": "direct",
-        "table": f"{BQ_DATASET}.{BQ_TABLE}",
+        "table": f"{BQ_DATASET}.{ARTIST_NAME_SLUG}_channel"
+    }
+)
+
+# BQへビデオデータの格納
+dynamic_video = DynamicFrame.fromDF(df_video, glueContext, "converted_frame")
+
+glueContext.write_dynamic_frame.from_options(
+    frame=dynamic_video,
+    connection_type="bigquery",
+    connection_options={
+        "connectionName": "bigquery-connector-spark-connection",
+        "parentProject": GCP_PROJECT_ID,
+        "writeMethod": "direct",
+        "table": f"{BQ_DATASET}.{ARTIST_NAME_SLUG}_video"
+    }
+)
+
+# BQへコメントデータの格納
+dynamic_comment = DynamicFrame.fromDF(df_comment, glueContext, "converted_frame")
+
+glueContext.write_dynamic_frame.from_options(
+    frame=dynamic_comment,
+    connection_type="bigquery",
+    connection_options={
+        "connectionName": "bigquery-connector-spark-connection",
+        "parentProject": GCP_PROJECT_ID,
+        "writeMethod": "direct",
+        "table": f"{BQ_DATASET}.{ARTIST_NAME_SLUG}_comment"
     }
 )
 
 # ////////////
 # データカタログの更新
 # ////////////
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
-log_json("データカタログの更新を開しました。")
+# spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
+# log_json("データカタログの更新を開しました。")
 
-try:
-    glue_client = boto3.client('glue')
-    print(f"Attempting to start crawler: {CRAWLER_NAME}")
+# try:
+#     glue_client = boto3.client('glue')
+#     print(f"Attempting to start crawler: {CRAWLER_NAME}")
 
-    glue_client.start_crawler(Name=CRAWLER_NAME)
-    print("Crawler started successfully to update Data Catalog.")
+#     glue_client.start_crawler(Name=CRAWLER_NAME)
+#     print("Crawler started successfully to update Data Catalog.")
 
-except Exception as e:
-    print(f"Warning: Error starting crawler {CRAWLER_NAME}: {e}")
+# except Exception as e:
+#     print(f"Warning: Error starting crawler {CRAWLER_NAME}: {e}")
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
-log_json("データカタログの更新を完了しました。GlueJobを完了しました。")
+# spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
+# log_json("データカタログの更新を完了しました。GlueJobを完了しました。")
     
 job.commit()
