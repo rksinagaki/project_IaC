@@ -202,13 +202,13 @@ def lambda_handler(event, context):
                 extra={"bucket": BUCKET_NAME, "s3_key": video_key})
 
     # コメントデータの格納
-    top_videos_df = df_videos.sort_values(by='view_count', ascending=False).head(100) #本来は100
+    top_videos_df = df_videos.sort_values(by='view_count', ascending=False).head(10) #本来は100
 
     all_comments = []
     for index, row in top_videos_df.iterrows():
         video_id = row['video_id']
         video_title = row['title']
-        comments = get_comments_for_video(video_id, max_comments_per_video=100)
+        comments = get_comments_for_video(video_id, max_comments_per_video=10) #本来は100
         all_comments.extend(comments)
 
     output_comment = StringIO()
@@ -242,6 +242,8 @@ def lambda_handler(event, context):
         "artist_name_display":ARTIST_NAME_DISPLAY,
         "artist_name_slug":ARTIST_NAME_SLUG
     }
+
+    logger.info(json.dumps(data_to_pass_to_sfn, indent=2))
 
     events_client = boto3.client('events')
     response = events_client.put_events(
