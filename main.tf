@@ -16,6 +16,40 @@ resource "aws_s3_bucket_public_access_block" "s3_data_lake_block" {
 }
 
 /*
+ * awsリポジトリ(ECR)の定義
+ */
+resource "aws_ecr_repository" "lambda_ecr_repository" {
+  name                 = "youtube-lambda-scraper-repository"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  force_delete = true
+}
+
+/*
+ * Secret managerの定義(API Keyは手動で設定)
+ */
+data "aws_caller_identity" "current" {}
+
+# Secrets Managerの枠組みとポリシーを作成
+module "youtube_secret" {
+  source = "terraform-aws-modules/secrets-manager/aws"
+  version = "2.0.0"
+
+  name_prefix             = "project-youtube-youtube-api-key"
+  description             = "YouTube Data API Key for data scraper"
+  recovery_window_in_days = 14
+  create_random_password = false 
+  secret_string = jsonencode({
+    API_KEY = "PLACEHOLDER" # 後で手動で入れる
+  })
+  create_policy = false
+}
+
+/*
  * Lambdaのassume role作成
  */
 resource "aws_iam_role" "lambda_execution_role" {
@@ -38,63 +72,70 @@ resource "aws_iam_role" "lambda_execution_role" {
 }
 
 /*
- * YouTubeAPI実行lambdaのアクセス権限ポリシー
+ * Lambdaのポリシー設定
  */
-resource "aws_iam_policy" "lambda_s3_policy" {
-  name        = "youtube-pipeline-lambda-access-policy"
-  description = "LambdaのS3への読み書き、ログの書き込み権限のポリシー"
+resource "aws_iam_policy" "lambda_combined_execution_policy" {
+  name        = "youtube-pipeline-lambda-combined-policy"
+  description = "YouTube API実行Lambdaに必要な全ての権限（Logs, S3, Secrets）"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # CloudWatch Logsへの書き込み権限
+      # LambdaのCloudWatch Logsへの書き込み権限
       {
-        Action = [
+        Sid      = "CloudWatchLogsAccess",
+        Effect   = "Allow",
+        Action   = [
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents",
-        ]
-        Effect   = "Allow"
+        ],
         Resource = "arn:aws:logs:*:*:*"
       },
-      # S3データレイクへのアクセス権限
+
+      # LambdaのS3データレイクへのアクセス権限
       {
-        Action = [
+        Sid      = "S3DataLakeAccess",
+        Effect   = "Allow",
+        Action   = [
           "s3:PutObject",
           "s3:GetObject",
           "s3:ListBucket"
-        ]
-        Effect   = "Allow"
-        # bucketとbucket内のリソースを指定
+        ],
         Resource = [
           aws_s3_bucket.s3_data_lake_bucket.arn,
-          "${aws_s3_bucket.s3_data_lake_bucket.arn}/*" 
+          "${aws_s3_bucket.s3_data_lake_bucket.arn}/*"
         ]
       },
+
+      # LambdaのSecret Managerへの読み取り権限
+      {
+        Sid      = "SecretsManagerRead",
+        Effect   = "Allow",
+        Action   = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ],
+        Resource = module.youtube_secret.secret_arn
+      },
+
+      # LambdaのEventBridgeへの引継ぎ権限
+      {
+        Sid      = "EventBridgePutEvents",
+        Effect   = "Allow",
+        Action   = "events:PutEvents",
+        Resource = "*"
+      }
     ]
   })
 }
 
 /*
- * ロールとポリシーの紐づけ
+ * Lambdaのポリシーをロールへアタッチ
  */
-resource "aws_iam_role_policy_attachment" "lambda_s3_attach" {
+resource "aws_iam_role_policy_attachment" "lambda_combined_attach" {
   role       = aws_iam_role.lambda_execution_role.name
-  policy_arn = aws_iam_policy.lambda_s3_policy.arn
-}
-
-/*
- * awsリポジトリ(ECR)の定義
- */
-resource "aws_ecr_repository" "lambda_ecr_repository" {
-  name                 = "youtube-lambda-scraper-repository"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  force_delete = true
+  policy_arn = aws_iam_policy.lambda_combined_execution_policy.arn 
 }
 
 /*
@@ -127,50 +168,6 @@ resource "aws_lambda_function" "youtube_lambda_scraper" {
   depends_on = [
     aws_ecr_repository.lambda_ecr_repository,
   ]
-}
-
-/*
- * Secret managerの定義(API Keyは手動で設定)
- */
-# data blockで現在のアカウントIDを取得
-data "aws_caller_identity" "current" {}
-
-# 1. Secrets Manager モジュールを使ってシークレットの枠組みとポリシーを作成
-module "youtube_secret" {
-  source = "terraform-aws-modules/secrets-manager/aws"
-  version = "2.0.0"
-
-  name_prefix             = "project-youtube-youtube-api-key"
-  description             = "YouTube Data API Key for data scraper"
-  recovery_window_in_days = 14
-  create_random_password = false 
-  secret_string = jsonencode({
-    API_KEY = "PLACEHOLDER" # 後で手動で入れる
-  })
-  create_policy = false
-}
-
-resource "aws_iam_policy" "lambda_secret_read_policy" {
-  name        = "lambda-secret-read_policy"
-  policy      = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
-        ],
-        Resource = module.youtube_secret.secret_arn
-      }
-    ]
-  })
-}
-
-# 作成したlambda_secret_read_policyをlambda_execution_roleへアタッチ
-resource "aws_iam_role_policy_attachment" "lambda_secret_read_attach" {
-  role       = aws_iam_role.lambda_execution_role.name 
-  policy_arn = aws_iam_policy.lambda_secret_read_policy.arn
 }
 
 /*
@@ -239,7 +236,6 @@ EOF
   tags = var.project_tags
 }
 
-
 /*
  * Lambda、SFN間のEventBridgeの定義
  */
@@ -253,29 +249,6 @@ locals {
   }
 }
 
-# LambdaのEventBridgeへの書き込みポリシー
-resource "aws_iam_policy" "eventbridge_put_events_policy" {
-  name        = "eventbridge-put-events-policy"
-  description = "Allows Lambda to put custom events to EventBridge."
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action   = "events:PutEvents"
-        Effect   = "Allow"
-        Resource = "*"
-      },
-    ]
-  })
-}
-
-# Lambda実行ロールへのポリシーのアタッチ
-resource "aws_iam_role_policy_attachment" "lambda_eventbridge_attach" {
-  # 既存のLambda実行ロールIDに置き換えてください
-  role       = aws_iam_role.lambda_execution_role.name
-  policy_arn = aws_iam_policy.eventbridge_put_events_policy.arn
-}
-
 /*
  * EventBridgeの設定
  */
@@ -285,7 +258,7 @@ module "eventbridge" {
 
   bus_name = "youtube-pipeline-event-bus"
 
-  # A. スケジュールベースの Lambda 実行設定 (最初のブロックの内容)
+  # スケジュールベースの Lambda 実行設定 (最初のブロックの内容)
   # Lambdaへの実行権限をモジュールに自動で設定させる
   attach_lambda_policy = true 
   lambda_target_arns   = [aws_lambda_function.youtube_lambda_scraper.arn]
@@ -319,12 +292,12 @@ module "eventbridge" {
     }
   }
 
-  # B. イベントパターンベースの SFN 起動設定 (2つ目のブロックの内容)
+  # イベントパターンベースの SFN 起動設定 (2つ目のブロックの内容)
   attach_sfn_policy = true
   sfn_target_arns   = [module.step-function.state_machine_arn]
   
   rules = {
-    scraper_completed_event = { # 名前を区別しやすいように変更
+    scraper_completed_event = {
       description = "Lambdaのスクレイピング完了イベントを捕捉し、SFNを起動"
       event_pattern = jsonencode({ 
         "source" : ["my-scraper"],            
@@ -428,38 +401,71 @@ resource "aws_iam_role" "glue_job_execution_role" {
 # Glueジョブのポリシー設定
 resource "aws_iam_policy" "glue_combined_policy" {
   name_prefix = "glue-youtube-job-combined-policy"
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # S3とSecret Managerへのアクセス
       {
-        Sid    = "RestrictedAccess",
+        Sid    = "DataAccessAndSecrets",
         Effect = "Allow",
         Action = [
           "secretsmanager:GetSecretValue",
-          "s3:ListBucket",
           "s3:GetObject",
           "s3:PutObject",
           "s3:DeleteObject"
         ],
         Resource = [
-          module.bigquery_secret.secret_arn, 
-          aws_s3_bucket.s3_data_lake_bucket.arn,
+          module.bigquery_secret.secret_arn,
           "${aws_s3_bucket.s3_data_lake_bucket.arn}/*",
-          aws_s3_bucket.s3_glue_script_bucket.arn,
           "${aws_s3_bucket.s3_glue_script_bucket.arn}/*"
         ]
       },
 
+      # S3 ListBucket権限
       {
-        Sid    = "BroadAccess",
+        Sid    = "ListS3Buckets",
         Effect = "Allow",
         Action = [
-          "glue:*",
+          "s3:ListBucket"
+        ],
+        Resource = [
+          aws_s3_bucket.s3_data_lake_bucket.arn,
+          aws_s3_bucket.s3_glue_script_bucket.arn
+        ]
+      },
+
+      # GlueカタログとCloudWatch Logs権限
+      {
+        Sid    = "GlueCatalogAndLogs",
+        Effect = "Allow",
+        Action = [
+          "glue:GetDatabase",
+          "glue:CreateTable",
+          "glue:UpdateTable",
+          "glue:GetTable",
+          "glue:DeleteTable",
+          "glue:GetTableVersions",
+          "glue:GetPartitions",
+          "glue:UpdatePartition",
+          "glue:CreatePartition",
+          "glue:BatchCreatePartition",
+          
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents",
-          "iam:PassRole"
+          
+          "iam:PassRole" 
+        ],
+        Resource = "*" 
+      },
+      
+      # Glueサービス固有権限
+      {
+        Sid    = "GlueServiceWideAccess",
+        Effect = "Allow",
+        Action = [
+          "glue:*"
         ],
         Resource = "*"
       }
@@ -467,7 +473,7 @@ resource "aws_iam_policy" "glue_combined_policy" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "combined_attach" {
+resource "aws_iam_role_policy_attachment" "glue_combined_attach" {
   role       = aws_iam_role.glue_job_execution_role.name
   policy_arn = aws_iam_policy.glue_combined_policy.arn
 }
@@ -507,10 +513,6 @@ resource "aws_glue_job" "youtube_data_processing_job" {
   }
 }
 
-resource "aws_sns_topic" "sns_alert_sfn_workflow" {
-  name = "youtube-etl-alert-topic" 
-}
-
 /*
  * クローラーとデータカタログの定義
  */
@@ -521,7 +523,7 @@ resource "aws_glue_catalog_database" "crawler_db" {
 resource "aws_glue_crawler" "youtube_processed_data_crawler" {
   database_name = aws_glue_catalog_database.crawler_db.name
   name          = "youtube_processed_data_crawler"
-  role          = # 後で記入
+  role          = aws_iam_role.glue_job_execution_role.arn
 
   s3_target {
     path = "s3://${var.data_bucket_name}"

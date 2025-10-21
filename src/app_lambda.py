@@ -161,6 +161,9 @@ def get_comments_for_video(video_id, max_comments_per_video=100):
 # /////////////////
 def lambda_handler(event, context):
     CHANNEL_ID = event.get("CHANNEL_ID")
+    ARTIST_NAME_DISPLAY = event.get("ARTIST_NAME_DISPLAY")
+    ARTIST_NAME_SLUG = event.get("ARTIST_NAME_SLUG")
+
     service_name = event.get("POWERTOOLS_SERVICE_NAME", "default_service")
     logger = Logger(service=service_name)
     current_execution_id = logger.get_correlation_id()
@@ -233,7 +236,9 @@ def lambda_handler(event, context):
         ],
         "correlation_id": current_execution_id,
         "report_base_path": report_base_path,
-        "processed_base_path": processed_base_path
+        "processed_base_path": processed_base_path,   
+        "artist_name_display":ARTIST_NAME_DISPLAY,
+        "artist_name_slug":ARTIST_NAME_SLUG
     }
 
     events_client = boto3.client('events')
@@ -254,13 +259,28 @@ def lambda_handler(event, context):
         'message': 'Scraping and event publication complete.'
     }
 
-    # return {
-    #     "statusCode": 200,
-    #     "bucket_name": BUCKET_NAME, 
-    #     "input_keys": [
-    #         f"s3://{BUCKET_NAME}/{channel_key}",
-    #         f"s3://{BUCKET_NAME}/{video_key}",
-    #         f"s3://{BUCKET_NAME}/{comment_key}"
-    #     ],
-    #     "correlation_id": current_execution_id 
-    # }
+# 参考：EventBridgeに送信される情報の中身
+# {
+#   "version": "0",
+#   "id": "c1f727c6-e91d-4034-789a-123456789012",
+#   "detail-type": "YouTubePipeline.Start",
+#   "source": "youtube.pipeline.lambda",
+#   "account": "123456789012",
+#   "time": "2025-10-22T04:50:40Z",
+#   "region": "ap-northeast-1",
+#   "resources": [],
+  
+#   "detail": {
+#     "statusCode": 200,
+#     "bucket_name": "youtube-etl-prod-data", 
+#     "input_keys": [
+#       "s3://youtube-etl-prod-data/artist_id=.../raw/channel_data.json",
+#       // ... 他の S3 パス
+#     ],
+#     "correlation_id": "uuid-123456",
+#     "report_base_path": "artist_id=.../report",
+#     "processed_base_path": "artist_id=.../processed", 
+#     "artist_name_display": "スキマスイッチ",
+#     "artist_name_slug": "sukima-switch"
+#   }
+# }
