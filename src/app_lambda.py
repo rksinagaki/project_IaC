@@ -220,6 +220,9 @@ def lambda_handler(event, context):
     
     logger.info("lambdaハンドラーが完了しました。")
 
+    report_base_path = f'channel={CHANNEL_ID}/workflow={current_execution_id}/dq_reports/'
+    processed_base_path = f'processed/channel={CHANNEL_ID}/workflow={current_execution_id}/processed_data/'
+
     data_to_pass_to_sfn = {
         "statusCode": 200,
         "bucket_name": BUCKET_NAME, 
@@ -228,7 +231,9 @@ def lambda_handler(event, context):
             f"s3://{BUCKET_NAME}/{video_key}",
             f"s3://{BUCKET_NAME}/{comment_key}"
         ],
-        "correlation_id": current_execution_id
+        "correlation_id": current_execution_id,
+        "report_base_path": report_base_path,
+        "processed_base_path": processed_base_path
     }
 
     events_client = boto3.client('events')

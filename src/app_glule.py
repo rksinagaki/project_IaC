@@ -19,13 +19,14 @@ from pyspark.sql.window import Window
 ## @params: [JOB_NAME]
 args = getResolvedOptions(sys.argv, [
     'JOB_NAME',
-    's3_base_path_transformed',
-    'dq_report_base_path',
-    'crawler_name',
-    's3_input_path_channel',
-    's3_input_path_video',
-    's3_input_path_comment',
-    'correlation_id'
+    's3_input_path_channel', # 動的
+    's3_input_path_video', # 動的
+    's3_input_path_comment', # 動的
+    'processed_base_path', # 動的
+    'report_base_path', # 動的
+    'correlation_id',
+
+    'crawler_name'# 静的
 ])
 
 sc = SparkContext()
@@ -39,14 +40,15 @@ spark_logger = glueContext.get_logger()
 # ////////////
 # 環境変数呼び出し
 # ////////////
-S3_BASE_PATH_TRANSFORMED = args['s3_base_path_transformed']
-DQ_REPORT_BASE_PATH = args['dq_report_base_path']
-CRAWLER_NAME = args['crawler_name']
+JOB_NAME = args['JOB_NAME']
 S3_INPUT_PATH_CHANNEL = args['s3_input_path_channel']
 S3_INPUT_PATH_VIDEO = args['s3_input_path_video']
 S3_INPUT_PATH_COMMENT = args['s3_input_path_comment']
+PROCESSED_BASE_PATH = args['processed_base_path']
+REPORT_BASE_PATH = args['report_base_path']
+
+CRAWLER_NAME = args['crawler_name']
 CORRELATION_ID = args['correlation_id']
-JOB_NAME = args['JOB_NAME']
 
 # ////////////
 # ロガー関数
@@ -241,21 +243,21 @@ run_data_quality_check(
     df_channel,
     glueContext,
     "channel",
-    f"{DQ_REPORT_BASE_PATH}channel/"
+    f"{REPORT_BASE_PATH}channel/"
     )
     
 run_data_quality_check(
     df_video,
     glueContext,
     "video",
-    f"{DQ_REPORT_BASE_PATH}video/"
+    f"{REPORT_BASE_PATH}video/"
     )
 
 run_data_quality_check(
     df_comment,
     glueContext,
     "comment",
-    f"{DQ_REPORT_BASE_PATH}comment/"
+    f"{REPORT_BASE_PATH}comment/"
     )
 
 spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
@@ -267,9 +269,9 @@ log_json("データクオリティーの実施が完了しました。S3へレ�
 spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("S3へデータの格納を開始しました。")
 
-df_channel.write.mode("overwrite").parquet(f"{S3_BASE_PATH_TRANSFORMED}{CORRELATION_ID}/sukima_transformed_channel")
-df_video.write.mode("overwrite").parquet(f"{S3_BASE_PATH_TRANSFORMED}{CORRELATION_ID}/sukima_transformed_video")
-df_comment.write.mode("overwrite").parquet(f"{S3_BASE_PATH_TRANSFORMED}{CORRELATION_ID}/sukima_transformed_comment")
+df_channel.write.mode("overwrite").parquet(f"{PROCESSED_BASE_PATH}processed_channel")
+df_video.write.mode("overwrite").parquet(f"{PROCESSED_BASE_PATH}processed_video")
+df_comment.write.mode("overwrite").parquet(f"{PROCESSED_BASE_PATH}processed_comment")
 
 spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("S3へデータの格納が完了しました。")

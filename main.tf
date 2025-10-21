@@ -297,6 +297,8 @@ module "eventbridge" {
       timezone            = "Asia/Tokyo"
       arn                 = aws_lambda_function.youtube_lambda_scraper.arn 
       input = jsonencode({
+        ARTIST_NAME_SLUG = "sukima-switch",
+        ARTIST_NAME_DISPLAY = "スキマスイッチ",
         CHANNEL_ID              = "UCCPkJMeZHhxKck-EptqQbBA",
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_sukima-switch"
@@ -308,6 +310,8 @@ module "eventbridge" {
       timezone            = "Asia/Tokyo"
       arn                 = aws_lambda_function.youtube_lambda_scraper.arn 
       input = jsonencode({
+        ARTIST_NAME_SLUG = "ikimonogakari",
+        ARTIST_NAME_DISPLAY = "いきものがかり",
         CHANNEL_ID              = "UCflAJoghlGeSkdz5eNIl-sg",
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_ikimono-gakari"
@@ -594,58 +598,4 @@ resource "google_bigquery_table" "bq_data_table" {
 
   schema     = jsonencode(each.value)
 }
-
-# resource "google_bigquery_table" "bq_data_table_2" {
-#   project = var.gcp_project_id
-#   dataset_id          = google_bigquery_dataset.bq_data_set.dataset_id
-#   table_id            = "sukimaswitch_channel_data"
-#   deletion_protection = true
-#   clustering          = ["channel_id"]
-
-#   time_partitioning {
-#     type = "DAY"
-#   }
-
-#   schema = <<EOF
-# [
-#   {
-#     "name": "published_at",
-#     "type": "INT64",
-#     "mode": "REQUIRED",
-#     "description": "user id"
-#   },
-#   {
-#     "name": "video_count",
-#     "type": "STRING",
-#     "mode": "NULLABLE",
-#     "description": "user name"
-#   },
-#   {
-#     "name": "total_views",
-#     "type": "DATE",
-#     "mode": "REQUIRED",
-#     "description": "created date"
-#   },
-#   {
-#     "name": "channel_id",
-#     "type": "DATE",
-#     "mode": "REQUIRED",
-#     "description": "created date"
-#   },
-#   {
-#     "name": "subscriber_count",
-#     "type": "DATE",
-#     "mode": "REQUIRED",
-#     "description": "created date"
-#   },
-#   {
-#     "name": "channel_name",
-#     "type": "DATE",
-#     "mode": "REQUIRED",
-#     "description": "created date"
-#   }
-# ]
-# EOF
-
-# }
  
