@@ -251,7 +251,7 @@ def lambda_handler(event, context):
                 'DetailType': EVENT_DETAIL_TYPE, 
                 # SFNに渡すデータをJSON文字列として 'Detail' に含める
                 'Detail': json.dumps(data_to_pass_to_sfn), 
-                'EventBusName': 'default' 
+                'EventBusName': 'youtube-pipeline-event-bus' 
             }
         ]
     )
