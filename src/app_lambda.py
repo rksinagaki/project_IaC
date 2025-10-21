@@ -166,9 +166,11 @@ def lambda_handler(event, context):
 
     service_name = event.get("POWERTOOLS_SERVICE_NAME", "default_service")
     logger = Logger(service=service_name)
-    current_execution_id = logger.get_correlation_id()
 
-    logger.info("Lambdaハンドラー処理を開始します。")
+    current_execution_id = context.aws_request_id
+    logger.set_correlation_id(current_execution_id)
+
+    logger.info(f"Lambdaハンドラー処理を開始します。{current_execution_id}")
 
     s3 = boto3.client('s3',
                       region_name=REGION_NAME)
@@ -221,7 +223,7 @@ def lambda_handler(event, context):
     logger.info("lambdaがS3へコメントデータを保存しました。", 
                 extra={"bucket": BUCKET_NAME, "s3_key": comment_key})
     
-    logger.info("lambdaハンドラーが完了しました。")
+    logger.info("Event Bridgeへ情報を引き継ぎます。")
 
     report_base_path = f'channel={CHANNEL_ID}/workflow={current_execution_id}/dq_reports/'
     processed_base_path = f'processed/channel={CHANNEL_ID}/workflow={current_execution_id}/processed_data/'
@@ -253,6 +255,9 @@ def lambda_handler(event, context):
             }
         ]
     )
+    logger.info(f"Event Bridgeへ情報を引き継ぎました。data = {response}")
+
+    logger.info("lambdaハンドラーが完了しました。")
 
     return {
         "statusCode": 200,
