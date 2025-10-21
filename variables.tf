@@ -29,3 +29,14 @@ variable "alert_email_endpoint" {
   description = "SNSアラートの通知先となるEメールアドレス"
   type        = string
 }
+
+variable "gcp_project_id" {
+  description = "GCP Project ID for BigQuery resources"
+  type        = string
+}
+
+variable "gcp_region" {
+  description = "GCP region (e.g., asia-northeast1)"
+  type        = string
+  default     = "asia-northeast1"
+}

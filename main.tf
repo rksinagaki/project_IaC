@@ -521,3 +521,131 @@ resource "aws_sns_topic_subscription" "alert_email_subscription" {
   protocol  = "email"
   endpoint  = var.alert_email_endpoint 
 }
+
+/*
+ * BigQueryの定義
+ */
+# BQデータセットの定義
+resource "google_bigquery_dataset" "bq_data_set" {
+  dataset_id                  = "youtube_project_processed_data"
+  friendly_name               = "Processed Data for YouTube Project"
+  description                 = "AWS Glueからの加工データを受け取るためのデータセット"
+  location                    = var.gcp_region
+  project = var.gcp_project_id
+}
+
+# BQスキーマの定義
+locals {
+  schema_channel = [
+    { name = "published_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "video_count", type = "INTEGER", mode = "NULLABLE" },
+    { name = "total_views", type = "INTEGER", mode = "NULLABLE" },
+    { name = "channel_id", type = "STRING", mode = "REQUIRED" },
+    { name = "subscriber_count", type = "INTEGER", mode = "NULLABLE" },
+    { name = "channel_name", type = "STRING", mode = "NULLABLE" }
+  ]
+  schema_video = [
+    { name = "video_id", type = "STRING", mode = "REQUIRED" },
+    { name = "title", type = "STRING", mode = "NULLABLE" },
+    { name = "published_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "view_count", type = "INTEGER", mode = "NULLABLE" },
+    { name = "like_count", type = "INTEGER", mode = "NULLABLE" },
+    { name = "comment_count", type = "INTEGER", mode = "NULLABLE" },
+    { name = "duration", type = "STRING", mode = "NULLABLE" },
+    { name = "tags", type = "STRING", mode = "NULLABLE" },
+    { name = "total_seconds", type = "INTEGER", mode = "NULLABLE" }
+  ]
+  schema_comment = [
+    { name = "video_id", type = "STRING", mode = "NULLABLE" },
+    { name = "comment_id", type = "STRING", mode = "REQUIRED" },
+    { name = "author_display_name", type = "STRING", mode = "NULLABLE" },
+    { name = "published_at", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "text_display", type = "STRING", mode = "NULLABLE" },
+    { name = "like_count", type = "INTEGER", mode = "NULLABLE" }
+  ]
+}
+
+# BQスキーマに対応するテーブルの定義
+locals {
+  table_schema_map = {
+    sukima-switch_channel = local.schema_channel
+    sukima-switch_video = local.schema_video
+    sukima-switch_comment = local.schema_comment
+    ikimonogakari_channel = local.schema_channel
+    ikimonogakari_video = local.schema_video
+    ikimonogakari_comment = local.schema_comment
+    spitz_channel = local.schema_channel
+    spitz_video = local.schema_video
+    spitz_comment = local.schema_comment
+  }
+}
+
+# BQテーブルの定義
+resource "google_bigquery_table" "bq_data_table" {
+  project = var.gcp_project_id
+  dataset_id = google_bigquery_dataset.bq_data_set.dataset_id
+
+  for_each = local.table_schema_map
+  table_id   = each.key
+  deletion_protection = true
+  time_partitioning {
+    type = "DAY"
+  }
+
+  schema     = jsonencode(each.value)
+}
+
+# resource "google_bigquery_table" "bq_data_table_2" {
+#   project = var.gcp_project_id
+#   dataset_id          = google_bigquery_dataset.bq_data_set.dataset_id
+#   table_id            = "sukimaswitch_channel_data"
+#   deletion_protection = true
+#   clustering          = ["channel_id"]
+
+#   time_partitioning {
+#     type = "DAY"
+#   }
+
+#   schema = <<EOF
+# [
+#   {
+#     "name": "published_at",
+#     "type": "INT64",
+#     "mode": "REQUIRED",
+#     "description": "user id"
+#   },
+#   {
+#     "name": "video_count",
+#     "type": "STRING",
+#     "mode": "NULLABLE",
+#     "description": "user name"
+#   },
+#   {
+#     "name": "total_views",
+#     "type": "DATE",
+#     "mode": "REQUIRED",
+#     "description": "created date"
+#   },
+#   {
+#     "name": "channel_id",
+#     "type": "DATE",
+#     "mode": "REQUIRED",
+#     "description": "created date"
+#   },
+#   {
+#     "name": "subscriber_count",
+#     "type": "DATE",
+#     "mode": "REQUIRED",
+#     "description": "created date"
+#   },
+#   {
+#     "name": "channel_name",
+#     "type": "DATE",
+#     "mode": "REQUIRED",
+#     "description": "created date"
+#   }
+# ]
+# EOF
+
+# }
+ 

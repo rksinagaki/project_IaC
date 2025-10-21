@@ -275,6 +275,22 @@ spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("S3へデータの格納が完了しました。")
 
 # ////////////
+# BigQueryへデータの格納
+# ////////////
+dynamic_channel = DynamicFrame.fromDF(df_channel, glueContext, "converted_frame")
+
+glueContext.write_dynamic_frame.from_options(
+    frame=dynamic_channel,
+    connection_type="bigquery",
+    connection_options={
+        "connectionName": "Glue-Connection-For-BigQuery",
+        "parentProject": GCP_PROJECT_ID,
+        "writeMethod": "direct",
+        "table": f"{BQ_DATASET}.{BQ_TABLE}",
+    }
+)
+
+# ////////////
 # データカタログの更新
 # ////////////
 spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
