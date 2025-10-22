@@ -249,6 +249,13 @@ locals {
   }
 }
 
+##### test #####
+# debug用ロググループの作成
+resource "aws_cloudwatch_log_group" "eventbridge_debug" {
+  name              = "/aws/events/youtube-pipeline-event-bus-debug-log"
+  retention_in_days = 7
+}
+
 /*
  * EventBridgeの設定
  */
@@ -256,7 +263,19 @@ module "eventbridge" {
   source  = "terraform-aws-modules/eventbridge/aws"
   version = "4.2.1"
 
-  bus_name = "youtube-pipeline-event-bus"
+  bus_name = "youtube-pipeline-event-bus-v2"
+
+  ##### test #####
+  log_config = {
+    include_detail = "FULL"
+    level          = "INFO"
+  }
+  ##### test #####
+  log_delivery = {
+    cloudwatch_logs = {
+      destination_arn = aws_cloudwatch_log_group.eventbridge_debug.arn
+    }
+  }
 
   # スケジュールベースの Lambda 実行設定 (最初のブロックの内容)
   # Lambdaへの実行権限をモジュールに自動で設定させる
@@ -300,8 +319,8 @@ module "eventbridge" {
     scraper_completed_event = {
       description = "Lambdaのスクレイピング完了イベントを捕捉し、SFNを起動"
       event_pattern = jsonencode({ 
-        "source" : ["my-scraper"],            
-        "detail-type": ["ScrapingCompleted"]
+        "Source":["my-scraper"],
+        "DetailType":["ScrapingCompleted"]
       })
       enabled = true
     }

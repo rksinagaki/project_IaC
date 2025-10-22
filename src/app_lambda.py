@@ -244,6 +244,8 @@ def lambda_handler(event, context):
     }
 
     logger.info(json.dumps(data_to_pass_to_sfn, indent=2))
+    logger.info(f"送信Source: {EVENT_SOURCE}")
+    logger.info(f"送信DetailType: {EVENT_DETAIL_TYPE}")
 
     events_client = boto3.client('events')
     response = events_client.put_events(
