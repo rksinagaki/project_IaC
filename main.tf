@@ -263,19 +263,19 @@ module "eventbridge" {
   source  = "terraform-aws-modules/eventbridge/aws"
   version = "4.2.1"
 
-  bus_name = "youtube-pipeline-event-bus-v2"
+  bus_name = "youtube-pipeline-event-bus"
 
   ##### test #####
-  log_config = {
-    include_detail = "FULL"
-    level          = "INFO"
-  }
-  ##### test #####
-  log_delivery = {
-    cloudwatch_logs = {
-      destination_arn = aws_cloudwatch_log_group.eventbridge_debug.arn
-    }
-  }
+  # log_config = {
+  #   include_detail = "FULL"
+  #   level          = "INFO"
+  # }
+  # ##### test #####
+  # log_delivery = {
+  #   cloudwatch_logs = {
+  #     destination_arn = aws_cloudwatch_log_group.eventbridge_debug.arn
+  #   }
+  # }
 
   # スケジュールベースの Lambda 実行設定 (最初のブロックの内容)
   # Lambdaへの実行権限をモジュールに自動で設定させる
@@ -319,8 +319,8 @@ module "eventbridge" {
     scraper_completed_event = {
       description = "Lambdaのスクレイピング完了イベントを捕捉し、SFNを起動"
       event_pattern = jsonencode({ 
-        "Source":["my-scraper"],
-        "DetailType":["ScrapingCompleted"]
+        "detail-type": ["ScrapingCompleted"],
+        "source": ["my-scraper"]
       })
       enabled = true
     }
