@@ -268,7 +268,7 @@ spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("データクオリティーの実施が完了しました。S3へレポートを出力しました。")
     
 # ////////////
-# データの格納
+# S3へデータの格納
 # ////////////
 spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("S3へ加工データの格納を開始しました。")
