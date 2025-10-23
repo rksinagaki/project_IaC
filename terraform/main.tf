@@ -203,12 +203,12 @@ module "step-function" {
     "Pass": {
       "Type": "Pass",
       "Parameters": {
-        "decoded_payload.$": "States.StringToJson($.input)"
+        "decoded_payload.$": "$.lambda_output"
       },
-      "ResultPath": "$.decoded_payload",
-      "Next": "Glue StartJobRun"
+      "ResultPath": "$",
+      "Next": "RunGlueJobAndWait"
     },
-    "Glue StartJobRun": {
+    "RunGlueJobAndWait": {
       "Type": "Task",
       "Resource": "arn:aws:states:::glue:startJobRun",
       "Parameters": {
@@ -292,7 +292,11 @@ locals {
     input_paths = {
       lambda_output = "$.detail"
     }
-    input_template = "<lambda_output>"
+    input_template = <<EOT
+{
+  "lambda_output": <lambda_output>
+}
+EOT
   }
 }
 
@@ -564,6 +568,8 @@ resource "aws_glue_job" "youtube_data_processing_job" {
     "--enable-continuous-log-filter"     = "true"
     "--enable-metrics"          = "true"
     "--enable-auto-scaling"     = "true"
+    "--gcp_project_id" = "project-youtube-472803"
+    "--bq_dataset" = "youtube_project_processed_data"
   }
 }
 

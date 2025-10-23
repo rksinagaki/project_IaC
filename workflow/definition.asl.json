@@ -7,12 +7,12 @@
     "Pass": {
       "Type": "Pass",
       "Parameters": {
-        "decoded_payload.$": "States.StringToJson($.input)"
+        "decoded_payload.$": "$.lambda_output"
       },
-      "ResultPath": "$.decoded_payload",
-      "Next": "Glue StartJobRun"
+      "ResultPath": "$",
+      "Next": "RunGlueJobAndWait"
     },
-    "Glue StartJobRun": {
+    "RunGlueJobAndWait": {
       "Type": "Task",
       "Resource": "arn:aws:states:::glue:startJobRun",
       "Parameters": {
@@ -61,7 +61,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::sns:publish",
       "Parameters": {
-        "TopicArn": "${aws_topic_sns.alert_topic_sfn.arn}",
+        "TopicArn": "${aws_sns_topic.alert_topic_sfn.arn}",
         "Message.$": "States.Format('ETL Pipeline FAILED for ID: {}. Error: {}', $.decoded_payload.correlation_id, $.ErrorDetails.Cause)",
         "MessageAttributes": {
           "Status": {
