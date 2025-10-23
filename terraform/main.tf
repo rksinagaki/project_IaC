@@ -197,7 +197,7 @@ module "step-function" {
 {
   "Comment": "A description of my state machine",
   "QueryLanguage": "JSONPath",
-  "TimeoutSeconds": 600,
+  "TimeoutSeconds": 900,
   "StartAt": "Pass",
   "States": {
     "Pass": {
@@ -233,13 +233,31 @@ module "step-function" {
           "Next": "NotifyFailure"
         }
       ],
-      "Next": "Success"
+      "Next": "StartCrawler"
+    },
+    "StartCrawler": {
+      "Type": "Task",
+      "Parameters": {
+        "Name": "${aws_glue_crawler.youtube_processed_data_crawler.name}"
+      },
+      "ResultPath": "$.crawler_result",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Next": "Success",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "NotifyFailure",
+          "Comment": "Crawler Failure"
+        }
+      ]
     },
     "NotifyFailure": {
       "Type": "Task",
       "Resource": "arn:aws:states:::sns:publish",
       "Parameters": {
-        "TopicArn": "${aws_topic_sns.alert_topic_sfn.arn}",
+        "TopicArn": "${aws_sns_topic.alert_topic_sfn.arn}",
         "Message.$": "States.Format('ETL Pipeline FAILED for ID: {}. Error: {}', $.decoded_payload.correlation_id, $.ErrorDetails.Cause)",
         "MessageAttributes": {
           "Status": {
