@@ -564,6 +564,8 @@ resource "aws_glue_job" "youtube_data_processing_job" {
     "--enable-continuous-log-filter"     = "true"
     "--enable-metrics"          = "true"
     "--enable-auto-scaling"     = "true"
+    "--gcp_project_id" = "project-youtube-472803"
+    "--bq_dataset" = "youtube_project_processed_data"
   }
 }
 
