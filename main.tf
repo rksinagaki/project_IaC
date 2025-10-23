@@ -196,35 +196,64 @@ module "step-function" {
   definition = <<EOF
 {
   "Comment": "A description of my state machine",
-  "StartAt": "Glue StartJobRun",
+  "QueryLanguage": "JSONPath",
+  "TimeoutSeconds": 600,
+  "StartAt": "Pass",
   "States": {
+    "Pass": {
+      "Type": "Pass",
+      "Parameters": {
+        "decoded_payload.$": "States.StringToJson($.input)"
+      },
+      "ResultPath": "$.decoded_payload",
+      "Next": "Glue StartJobRun"
+    },
     "Glue StartJobRun": {
       "Type": "Task",
       "Resource": "arn:aws:states:::glue:startJobRun",
       "Parameters": {
-        "JobName": "${aws_glue_job.youtube_data_processing_job.name}"
+        "JobName": "${aws_glue_job.youtube_data_processing_job.name}",
+        "Arguments": {
+          "--artist_name_slug.$": "$.decoded_payload.artist_name_slug",
+          "--correlation_id.$": "$.decoded_payload.correlation_id",
+          "--s3_input_path_comment.$": "$.decoded_payload.input_keys[2]",
+          "--processed_base_path.$": "$.decoded_payload.processed_base_path",
+          "--report_base_path.$": "$.decoded_payload.report_base_path",
+          "--s3_input_path_channel.$": "$.decoded_payload.input_keys[0]",
+          "--s3_input_path_video.$": "$.decoded_payload.input_keys[1]"
+        }
       },
+      "ResultPath": "$.glue_result",
       "Catch": [
         {
           "ErrorEquals": [
             "States.ALL"
           ],
-          "Next": "SNS Publish"
+          "ResultPath": "$.ErrorDetails",
+          "Next": "NotifyFailure"
         }
       ],
-      "End": true
+      "Next": "Success"
     },
-    "SNS Publish": {
+    "NotifyFailure": {
       "Type": "Task",
       "Resource": "arn:aws:states:::sns:publish",
       "Parameters": {
-        "Message.$": "$"
+        "TopicArn": "${aws_topic_sns.alert_topic_sfn.arn}",
+        "Message.$": "States.Format('ETL Pipeline FAILED for ID: {}. Error: {}', $.decoded_payload.correlation_id, $.ErrorDetails.Cause)",
+        "MessageAttributes": {
+          "Status": {
+            "DataType": "String",
+            "StringValue": "FAILED"
+          }
+        }
       },
       "End": true
+    },
+    "Success": {
+      "Type": "Succeed"
     }
-  },
-  "QueryLanguage": "JSONPath",
-  "TimeoutSeconds": 600
+  }
 }
 EOF
   service_integrations = {
@@ -264,18 +293,6 @@ module "eventbridge" {
   version = "4.2.1"
 
   bus_name = "youtube-pipeline-event-bus"
-
-  ##### test #####
-  # log_config = {
-  #   include_detail = "FULL"
-  #   level          = "INFO"
-  # }
-  # ##### test #####
-  # log_delivery = {
-  #   cloudwatch_logs = {
-  #     destination_arn = aws_cloudwatch_log_group.eventbridge_debug.arn
-  #   }
-  # }
 
   # スケジュールベースの Lambda 実行設定 (最初のブロックの内容)
   # Lambdaへの実行権限をモジュールに自動で設定させる

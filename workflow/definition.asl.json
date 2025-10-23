@@ -1,0 +1,79 @@
+{
+  "Comment": "A description of my state machine",
+  "QueryLanguage": "JSONPath",
+  "TimeoutSeconds": 900,
+  "StartAt": "Pass",
+  "States": {
+    "Pass": {
+      "Type": "Pass",
+      "Parameters": {
+        "decoded_payload.$": "States.StringToJson($.input)"
+      },
+      "ResultPath": "$.decoded_payload",
+      "Next": "Glue StartJobRun"
+    },
+    "Glue StartJobRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun",
+      "Parameters": {
+        "JobName": "${aws_glue_job.youtube_data_processing_job.name}",
+        "Arguments": {
+          "--artist_name_slug.$": "$.decoded_payload.artist_name_slug",
+          "--correlation_id.$": "$.decoded_payload.correlation_id",
+          "--s3_input_path_comment.$": "$.decoded_payload.input_keys[2]",
+          "--processed_base_path.$": "$.decoded_payload.processed_base_path",
+          "--report_base_path.$": "$.decoded_payload.report_base_path",
+          "--s3_input_path_channel.$": "$.decoded_payload.input_keys[0]",
+          "--s3_input_path_video.$": "$.decoded_payload.input_keys[1]"
+        }
+      },
+      "ResultPath": "$.glue_result",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.ErrorDetails",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "StartCrawler"
+    },
+    "StartCrawler": {
+      "Type": "Task",
+      "Parameters": {
+        "Name": "${aws_glue_crawler.youtube_processed_data_crawler.name}"
+      },
+      "ResultPath": "$.crawler_result",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Next": "Success",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "NotifyFailure",
+          "Comment": "Crawler Failure"
+        }
+      ]
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${aws_topic_sns.alert_topic_sfn.arn}",
+        "Message.$": "States.Format('ETL Pipeline FAILED for ID: {}. Error: {}', $.decoded_payload.correlation_id, $.ErrorDetails.Cause)",
+        "MessageAttributes": {
+          "Status": {
+            "DataType": "String",
+            "StringValue": "FAILED"
+          }
+        }
+      },
+      "End": true
+    },
+    "Success": {
+      "Type": "Succeed"
+    }
+  }
+}

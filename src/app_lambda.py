@@ -225,8 +225,8 @@ def lambda_handler(event, context):
     
     logger.info("Event Bridgeへ情報を引き継ぎます。")
 
-    report_base_path = f'channel={CHANNEL_ID}/workflow={current_execution_id}/dq_reports/'
-    processed_base_path = f'channel={CHANNEL_ID}/workflow={current_execution_id}/processed_data/'
+    report_base_path = f'{BUCKET_NAME}/channel={CHANNEL_ID}/workflow={current_execution_id}/dq_reports/'
+    processed_base_path = f'{BUCKET_NAME}/channel={CHANNEL_ID}/workflow={current_execution_id}/processed_data/'
 
     data_to_pass_to_sfn = {
         "statusCode": 200,

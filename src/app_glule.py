@@ -25,12 +25,10 @@ args = getResolvedOptions(sys.argv, [
     'processed_base_path', # 動的
     'report_base_path', # 動的
     'artist_name_slug', # 動的
-    'correlation_id',
+    'correlation_id',# 動的
 
-    'crawler_name',# 静的
-    'gcp_project_id',
-    # 'bq_dataset',
-    # 'bq_table'
+    'gcp_project_id',# 静的
+    'bq_dataset'# 静的
 ])
 
 sc = SparkContext()
@@ -156,7 +154,7 @@ comment_schema = StructType([
 # ////////////
 # データの読み込み
 # ////////////
-log_json("GlueJobを開始しました。S3からデータの読み込みを開始しました。")
+log_json("GlueJobを開始します。S3からデータの読み込みを開始しました。")
 
 df_channel = spark.read.schema(channel_schema).json(S3_INPUT_PATH_CHANNEL)
 df_video = spark.read.schema(video_schema).json(S3_INPUT_PATH_VIDEO)
@@ -273,19 +271,22 @@ log_json("データクオリティーの実施が完了しました。S3へレ�
 # データの格納
 # ////////////
 spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
-log_json("S3へデータの格納を開始しました。")
+log_json("S3へ加工データの格納を開始しました。")
 
 df_channel.write.mode("overwrite").parquet(f"s3://{PROCESSED_BASE_PATH}processed_channel")
 df_video.write.mode("overwrite").parquet(f"s3://{PROCESSED_BASE_PATH}processed_video")
 df_comment.write.mode("overwrite").parquet(f"s3://{PROCESSED_BASE_PATH}processed_comment")
 
 spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
-log_json("S3へデータの格納が完了しました。")
+log_json("S3へ加工データの格納が完了しました。")
 
 # ////////////
 # BigQueryへデータの格納
 # ////////////
 # BQへチャンネルデータの格納
+spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
+log_json("BigQueryへのチャンネルデータの書き込みを開始しました。")
+
 dynamic_channel = DynamicFrame.fromDF(df_channel, glueContext, "converted_frame")
 
 glueContext.write_dynamic_frame.from_options(
@@ -298,7 +299,14 @@ glueContext.write_dynamic_frame.from_options(
         "table": f"{BQ_DATASET}.{ARTIST_NAME_SLUG}_channel"
     }
 )
+
+spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
+log_json("BigQueryへのチャンネルデータの書き込みを完了しました。")
+
 # BQへビデオデータの格納
+spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
+log_json("BigQueryへのビデオデータの書き込みを開始しました。")
+
 dynamic_video = DynamicFrame.fromDF(df_video, glueContext, "converted_frame")
 
 glueContext.write_dynamic_frame.from_options(
@@ -312,7 +320,13 @@ glueContext.write_dynamic_frame.from_options(
     }
 )
 
+spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
+log_json("BigQueryへのビデオデータの書き込みを完了しました。")
+
 # BQへコメントデータの格納
+spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
+log_json("BigQueryへのコメントデータの書き込みを開始しました。")
+
 dynamic_comment = DynamicFrame.fromDF(df_comment, glueContext, "converted_frame")
 
 glueContext.write_dynamic_frame.from_options(
@@ -326,23 +340,8 @@ glueContext.write_dynamic_frame.from_options(
     }
 )
 
-# ////////////
-# データカタログの更新
-# ////////////
-# spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
-# log_json("データカタログの更新を開しました。")
+spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
+log_json("BigQueryへのコメントデータの書き込みを完了しました。")
+log_json("Glueジョブが正常に完了しました。")
 
-# try:
-#     glue_client = boto3.client('glue')
-#     print(f"Attempting to start crawler: {CRAWLER_NAME}")
-
-#     glue_client.start_crawler(Name=CRAWLER_NAME)
-#     print("Crawler started successfully to update Data Catalog.")
-
-# except Exception as e:
-#     print(f"Warning: Error starting crawler {CRAWLER_NAME}: {e}")
-
-# spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
-# log_json("データカタログの更新を完了しました。GlueJobを完了しました。")
-    
 job.commit()
