@@ -392,12 +392,13 @@ module "eventbridge" {
   }
 
   targets = {
-    scraper_completed_event = [ # ルール名とキー名を一致させる
+    scraper_completed_event = [
       {
         name              = "start-sfn-workflow"
         arn               = module.step-function.state_machine_arn # SFNのARNを参照
         attach_role_arn = true
         input_transformer = local.sfn_input_transformer
+        dead_letter_arn = module.youtube_event_dlq.queue_arn
       }
     ]
   }
@@ -704,3 +705,57 @@ resource "google_bigquery_table" "bq_data_table" {
   schema     = jsonencode(each.value)
 }
  
+/*
+ * EventBridgeのエラーを受け取るSQSの定義
+ */
+module "youtube_event_dlq" {
+  source  = "terraform-aws-modules/sqs/aws"
+  version = "5.1.0"
+
+  name = "youtube_event_dlq"
+  create_queue_policy = true
+
+  queue_policy_statements = {
+    eventbridge_send = {
+      sid     = "AllowEventBridgeToSendMessages"
+      actions = ["sqs:SendMessage"]
+
+      principals = [
+        {
+          type        = "Service"
+          identifiers = ["events.amazonaws.com"]
+        }
+      ]
+
+      condition = [{
+        test     = "ForAllValues:ArnEquals" 
+        variable = "aws:SourceArn"
+        values   = module.eventbridge.eventbridge_rule_arns 
+      }]
+    }
+  }
+}
+
+/*
+ * SQSを受け取るCloudWatchアラームの定義
+ */
+module "dlq_alarm" {
+  source  = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+  version = "5.7.2"
+
+  alarm_name          = "dlq-eventbridge-Alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  period              = 300
+  statistic           = "Sum"
+  
+  metric_name = "ApproximateNumberOfMessagesVisible"
+  namespace   = "AWS/SQS"
+  
+  dimensions = { 
+    QueueName = module.youtube_event_dlq.sqs_queue_name
+  }
+
+  alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
+}
