@@ -730,7 +730,7 @@ module "youtube_event_dlq" {
       condition = [{
         test     = "ForAllValues:ArnEquals" 
         variable = "aws:SourceArn"
-        values   = module.eventbridge.eventbridge_rule_arns 
+        values   = [module.eventbridge.eventbridge_rule_arns.scraper_completed_event]
       }]
     }
   }
@@ -754,7 +754,7 @@ module "dlq_alarm" {
   namespace   = "AWS/SQS"
   
   dimensions = { 
-    QueueName = module.youtube_event_dlq.sqs_queue_name
+    QueueName = module.youtube_event_dlq.queue_name
   }
 
   alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]

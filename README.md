@@ -1,2 +1,2 @@
 # project_IaC
-implement CDK, make pipeline to Redshift
+implement Terraform, make pipeline to BigQuery
