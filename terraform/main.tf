@@ -186,6 +186,29 @@ resource "aws_iam_role" "sfn_glue_execution_role" {
   })
 }
 
+# SFNのポリシー（別途で記述）
+resource "aws_iam_policy" "glue_startcrawler_policy" {
+  name        = "AllowGlueStartCrawler"
+  description = "Allow Step Function to start Glue crawler"
+  policy      = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "glue:StartCrawler"
+        ],
+        Resource = "arn:aws:glue:ap-northeast-1:879363564916:crawler/youtube_processed_data_crawler"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "attach_glue_startcrawler" {
+  role       = module.step-function.role_name
+  policy_arn = aws_iam_policy.glue_startcrawler_policy.arn
+}
+
 module "step-function" {
   source  = "terraform-aws-modules/step-functions/aws"
   version = "5.0.1"
@@ -277,6 +300,9 @@ EOF
   service_integrations = {
     glue_Sync = {
       glue = [aws_glue_job.youtube_data_processing_job.arn]
+    }
+    sns = {
+      sns = [aws_sns_topic.alert_topic_sfn.arn]
     }
   }
 
@@ -600,7 +626,7 @@ resource "aws_sns_topic" "alert_topic_sfn" {
 
 # Eメールサブスクリプションの定義
 resource "aws_sns_topic_subscription" "alert_email_subscription" {
-  topic_arn = aws_sns_topic.alert_topic_sfn.arn 
+  topic_arn = aws_sns_topic.alert_topic_sfn.arn
   protocol  = "email"
   endpoint  = var.alert_email_endpoint 
 }
