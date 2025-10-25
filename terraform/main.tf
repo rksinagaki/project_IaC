@@ -187,8 +187,8 @@ resource "aws_iam_role" "sfn_glue_execution_role" {
 }
 
 # SFNのポリシー（別途で記述）
-resource "aws_iam_policy" "glue_startcrawler_cloudwatch_policy" {
-  name        = "AllowGlueStartCrawlerCloudWatch"
+resource "aws_iam_policy" "startcrawler_cloudwatch_policy" {
+  name        = "AllowStartCrawlerCloudWatch"
   description = "Allow Step Function to start Glue crawler"
   policy      = jsonencode({
     Version = "2012-10-17",
@@ -199,6 +199,14 @@ resource "aws_iam_policy" "glue_startcrawler_cloudwatch_policy" {
           "glue:StartCrawler"
         ],
         Resource = "arn:aws:glue:ap-northeast-1:879363564916:crawler/youtube_processed_data_crawler"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        Resource = "arn:aws:logs:ap-northeast-1:879363564916:log-group:/prd/data-pipeline/sfn-executions:*" 
       }
     ]
   })
@@ -207,7 +215,7 @@ resource "aws_iam_policy" "glue_startcrawler_cloudwatch_policy" {
 # SFNがCrawlerをスタートするポリシーをモジュールにアタッチ
 resource "aws_iam_role_policy_attachment" "attach_glue_startcrawler" {
   role       = module.step-function.role_name
-  policy_arn = aws_iam_policy.glue_startcrawler_policy.arn
+  policy_arn = aws_iam_policy.startcrawler_cloudwatch_policy.arn
 }
 
 # SFNの定義
@@ -301,8 +309,6 @@ module "step-function" {
 EOF
   cloudwatch_log_group_name = "/prd/data-pipeline/sfn-executions"
 
-  attach_cloudwatch_logs_policy = true
-
   service_integrations = {
     glue_Sync = {
       glue = [aws_glue_job.youtube_data_processing_job.arn]
@@ -316,7 +322,6 @@ EOF
   }
 
   logging_configuration = {
-    # log_destination        = aws_cloudwatch_log_group.sfn_logs.arn
     include_execution_data = true 
     level                  = "ERROR"
   }
