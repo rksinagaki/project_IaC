@@ -173,29 +173,29 @@ resource "aws_lambda_function" "youtube_lambda_scraper" {
 /*
  * Lambda自体のアラーム
  */
-# module "sfn_execution_failure_alarm" {
-#   source              = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
-#   version             = "5.7.2"
+module "lambda_function_failure_alarm" {
+  source              = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+  version             = "5.7.2"
 
-#   alarm_name          = "sfn-execution-failed-alarm"
-#   alarm_description   = "SFNワークフローの実行が失敗しました。Catchブロックで処理されないシステムエラーなどを検知。"
-#   comparison_operator = "GreaterThanThreshold"
-#   evaluation_periods  = 1
-#   threshold           = 0
-#   period              = 300
-#   statistic           = "Sum"
+  alarm_name          = "lambda-function-failed-alarm"
+  alarm_description   = "Lambda関数が実行時エラー（タイムアウト、認証失敗など）を返した場合に発報"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  period              = 300
+  statistic           = "Sum"
   
-#   metric_name = "ExecutionsFailed"
-#   namespace   = "AWS/States"
+  metric_name = "Errors"
+  namespace   = "AWS/Lambda"
 
-#   dimensions = { 
-#     StateMachineName = module.step-function.state_machine_name
-#   }
+  dimensions = { 
+    FunctionName = aws_lambda_function.youtube_lambda_scraper.function_name
+  }
 
-#   treat_missing_data = "notBreaching"
+  treat_missing_data = "notBreaching"
 
-#   alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
-# }
+  alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
+}
 
 /*
  * SFNの定義
