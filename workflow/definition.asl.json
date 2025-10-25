@@ -46,7 +46,7 @@
       },
       "ResultPath": "$.crawler_result",
       "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
-      "Next": "Success",
+      "Next": "NotifySuccess",
       "Catch": [
         {
           "ErrorEquals": [
@@ -56,6 +56,21 @@
           "Comment": "Crawler Failure"
         }
       ]
+    },
+    "NotifySuccess": { 
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${aws_sns_topic.alert_topic_sfn.arn}", 
+        "Message.$": "States.Format('ETL Pipeline SUCCESS ID: {}', $.decoded_payload.correlation_id)",
+        "MessageAttributes": {
+          "Status": {
+            "DataType": "String",
+            "StringValue": "SUCCESS"
+          }
+        }
+      },
+      "Next": "Success"
     },
     "NotifyFailure": {
       "Type": "Task",

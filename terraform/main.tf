@@ -171,6 +171,33 @@ resource "aws_lambda_function" "youtube_lambda_scraper" {
 }
 
 /*
+ * Lambda自体のアラーム
+ */
+# module "sfn_execution_failure_alarm" {
+#   source              = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+#   version             = "5.7.2"
+
+#   alarm_name          = "sfn-execution-failed-alarm"
+#   alarm_description   = "SFNワークフローの実行が失敗しました。Catchブロックで処理されないシステムエラーなどを検知。"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = 1
+#   threshold           = 0
+#   period              = 300
+#   statistic           = "Sum"
+  
+#   metric_name = "ExecutionsFailed"
+#   namespace   = "AWS/States"
+
+#   dimensions = { 
+#     StateMachineName = module.step-function.state_machine_name
+#   }
+
+#   treat_missing_data = "notBreaching"
+
+#   alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
+# }
+
+/*
  * SFNの定義
  */
 # SFNの定義に必要なIAMロール
@@ -275,7 +302,7 @@ module "step-function" {
       },
       "ResultPath": "$.crawler_result",
       "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
-      "Next": "Success",
+      "Next": "NotifySuccess",
       "Catch": [
         {
           "ErrorEquals": [
@@ -285,6 +312,21 @@ module "step-function" {
           "Comment": "Crawler Failure"
         }
       ]
+    },
+    "NotifySuccess": { 
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${aws_sns_topic.alert_topic_sfn.arn}", 
+        "Message.$": "States.Format('ETL Pipeline SUCCESS ID: {}', $.decoded_payload.correlation_id)",
+        "MessageAttributes": {
+          "Status": {
+            "DataType": "String",
+            "StringValue": "SUCCESS"
+          }
+        }
+      },
+      "Next": "Success"
     },
     "NotifyFailure": {
       "Type": "Task",
@@ -323,10 +365,38 @@ EOF
 
   logging_configuration = {
     include_execution_data = true 
-    level                  = "ERROR"
+    level                  = "ALL"
   }
 
   tags = var.project_tags
+}
+
+/*
+ * SFN自体のアラーム
+ */
+# SFNの実行失敗を検知するアラーム
+module "sfn_execution_failure_alarm" {
+  source              = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+  version             = "5.7.2"
+
+  alarm_name          = "sfn-execution-failed-alarm"
+  alarm_description   = "SFNワークフローの実行が失敗しました。Catchブロックで処理されないシステムエラーなどを検知。"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  period              = 300
+  statistic           = "Sum"
+  
+  metric_name = "ExecutionsFailed"
+  namespace   = "AWS/States"
+
+  dimensions = { 
+    StateMachineName = module.step-function.state_machine_name
+  }
+
+  treat_missing_data = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
 }
 
 /*
@@ -344,13 +414,6 @@ locals {
 }
 EOT
   }
-}
-
-##### test #####
-# debug用ロググループの作成
-resource "aws_cloudwatch_log_group" "eventbridge_debug" {
-  name              = "/aws/events/youtube-pipeline-event-bus-debug-log"
-  retention_in_days = 7
 }
 
 /*
