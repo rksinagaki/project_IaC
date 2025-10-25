@@ -187,8 +187,8 @@ resource "aws_iam_role" "sfn_glue_execution_role" {
 }
 
 # SFNのポリシー（別途で記述）
-resource "aws_iam_policy" "glue_startcrawler_policy" {
-  name        = "AllowGlueStartCrawler"
+resource "aws_iam_policy" "glue_startcrawler_cloudwatch_policy" {
+  name        = "AllowGlueStartCrawlerCloudWatch"
   description = "Allow Step Function to start Glue crawler"
   policy      = jsonencode({
     Version = "2012-10-17",
@@ -204,18 +204,20 @@ resource "aws_iam_policy" "glue_startcrawler_policy" {
   })
 }
 
+# SFNがCrawlerをスタートするポリシーをモジュールにアタッチ
 resource "aws_iam_role_policy_attachment" "attach_glue_startcrawler" {
   role       = module.step-function.role_name
   policy_arn = aws_iam_policy.glue_startcrawler_policy.arn
 }
 
+# SFNの定義
 module "step-function" {
   source  = "terraform-aws-modules/step-functions/aws"
   version = "5.0.1"
 
   name       = "youtube-glue-workflow"
   type = "STANDARD"
-  # 後で変更
+
   definition = <<EOF
 {
   "Comment": "A description of my state machine",
@@ -297,6 +299,10 @@ module "step-function" {
   }
 }
 EOF
+  cloudwatch_log_group_name = "/prd/data-pipeline/sfn-executions"
+
+  attach_cloudwatch_logs_policy = true
+
   service_integrations = {
     glue_Sync = {
       glue = [aws_glue_job.youtube_data_processing_job.arn]
@@ -304,6 +310,15 @@ EOF
     sns = {
       sns = [aws_sns_topic.alert_topic_sfn.arn]
     }
+    xray = {
+      xray = true
+    }
+  }
+
+  logging_configuration = {
+    # log_destination        = aws_cloudwatch_log_group.sfn_logs.arn
+    include_execution_data = true 
+    level                  = "ERROR"
   }
 
   tags = var.project_tags

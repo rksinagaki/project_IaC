@@ -6,3 +6,6 @@ run-container:
 		-v ~/.config/gcloud:/root/.config/gcloud:ro \
 		--name terraform-session \
 		terraform-aws-env:v1.0 bash
+
+terraform-init:
+	
