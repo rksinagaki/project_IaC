@@ -358,9 +358,6 @@ EOF
     sns = {
       sns = [aws_sns_topic.alert_topic_sfn.arn]
     }
-    xray = {
-      xray = true
-    }
   }
 
   logging_configuration = {
