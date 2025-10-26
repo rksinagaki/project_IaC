@@ -443,7 +443,17 @@ module "eventbridge" {
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_sukima-switch"
       })
+      log_config = {
+        include_detail = "FULL"
+        level          = "ERROR"
+      }
+      log_delivery = {
+        cloudwatch_logs = {
+          destination_arn = aws_cloudwatch_log_group.scheduler_logs.arn
+        }
+      }
     }
+
     ikimono_schedule = {
       description         = "Lambda trigger schedule for Channel Ikimono-Gakari"
       schedule_expression = "cron(0 6 ? * MON *)"
@@ -456,6 +466,15 @@ module "eventbridge" {
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_ikimono-gakari"
       })
+      log_config = {
+        include_detail = "FULL"
+        level          = "ERROR"
+      }
+      log_delivery = {
+        cloudwatch_logs = {
+          destination_arn = aws_cloudwatch_log_group.scheduler_logs.arn
+        }
+      }
     }
   }
 
@@ -487,6 +506,37 @@ module "eventbridge" {
   }
 
   tags = var.project_tags
+}
+
+/*
+ * スケジューラー自体に対するアラームの設定
+ */
+module "scheduler_failure_alarm" {
+  source              = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+  version             = "5.7.2"
+
+  alarm_name          = "scheduler-failed-alert"
+  alarm_description   = "EventBridge SchedulerがLambdaの呼び出しに失敗し、パイプラインが起動できませんでした。"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  period              = 300
+  statistic           = "Sum"
+  
+  metric_name = "FailedInvocations"
+  namespace   = "AWS/Scheduler"
+
+  treat_missing_data = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
+}
+
+/*
+ * スケジューラーのロググループの設定
+ */
+resource "aws_cloudwatch_log_group" "scheduler_logs" {
+  name              = "/aws/events/scheduler/youtube-pipeline-schedules"
+  retention_in_days = 7
 }
 
 /*
@@ -822,7 +872,7 @@ module "youtube_event_dlq" {
 /*
  * SQSを受け取るCloudWatchアラームの定義
  */
-module "dlq_alarm" {
+module "dlq_event_alarm" {
   source  = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
   version = "5.7.2"
 
