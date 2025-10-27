@@ -103,28 +103,24 @@ def run_data_quality_check(df, glueContext, df_name, result_s3_prefix):
         ]
         """
 
-    dq_results = EvaluateDataQuality.apply(
-        frame=dyf_to_check,
-        ruleset=dqdl_ruleset,
+    dq_results = EvaluateDataQuality().process_rows(
+        frame=dyf_to_check, 
+        ruleset=dqdl_ruleset, 
         publishing_options={
-            "dataQualityEvaluationContext": df_name,
-            "enableDataQualityResultsPublishing": True,
-            "resultsS3Prefix": result_s3_prefix
-        }
+            "dataQualityEvaluationContext": f"{df_name}", 
+            "enableDataQualityCloudWatchMetrics": False, 
+            "enableDataQualityResultsPublishing": True, 
+            "resultsS3Prefix": f"{result_s3_prefix}"
+        }, 
+        additional_options={"observations.scope":"ALL","performanceTuning.caching":"CACHE_NOTHING"}
     )
 
-    # DataQuality失敗時、格納処理の停止
-    data_quality_status = dq_results.getMatchingFrame(
-        judgement_on_rule_not_found = "Fail"
-    ).toDF().select("DataQualityEvaluationResult").collect()[0][0]
-
-    if data_quality_status != "PASS":
-        error_message = f"Data Quality check FAILED for DataFrame: {df_name}. Status: {data_quality_status}"
-        raise Exception(error_message)
-
-    dq_df = dq_results.toDF()
+    # ////////////
+    # GlueJobの停止設定(DQを満たさない場合Jobの停止)
+    # ////////////
+    assert dq_results[EvaluateDataQuality.DATA_QUALITY_RULE_OUTCOMES_KEY].filter(lambda x: x["Outcome"] == "Failed").count() == 0, f"FATAL ERROR: The job failed due to failing DQ rules for {df_name}. Pipeline interrupted."
     
-    return dq_df
+    return
 
 # ////////////
 # スキーマ設計
