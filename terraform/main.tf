@@ -16,6 +16,31 @@ resource "aws_s3_bucket_public_access_block" "s3_data_lake_block" {
 }
 
 /*
+ * S3データレイク,ライフサイクルルール定義
+ */
+resource "aws_s3_bucket_lifecycle_configuration" "s3_data_lake_lifecycle" {
+  bucket = aws_s3_bucket.s3_data_lake_bucket.id
+
+  rule {
+    id     = "youtube_project_data_lifecycle"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    expiration {
+      days = 60 
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
+
+/*
  * awsリポジトリ(ECR)の定義
  */
 resource "aws_ecr_repository" "lambda_ecr_repository" {
@@ -182,7 +207,7 @@ module "lambda_function_failure_alarm" {
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   threshold           = 0
-  period              = 300
+  period              = 600
   statistic           = "Sum"
   
   metric_name = "Errors"
@@ -381,7 +406,7 @@ module "sfn_execution_failure_alarm" {
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   threshold           = 0
-  period              = 300
+  period              = 600
   statistic           = "Sum"
   
   metric_name = "ExecutionsFailed"
@@ -440,6 +465,10 @@ module "eventbridge" {
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_sukima-switch"
       })
+      retry_policy = {
+        maximum_retry_attempts = 2
+        maximum_event_age_in_seconds = 300
+      }
       log_config = {
         include_detail = "FULL"
         level          = "ERROR"
@@ -463,6 +492,10 @@ module "eventbridge" {
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_ikimono-gakari"
       })
+      retry_policy = {
+        maximum_retry_attempts = 2
+        maximum_event_age_in_seconds = 300
+      }
       log_config = {
         include_detail = "FULL"
         level          = "ERROR"
@@ -517,7 +550,7 @@ module "scheduler_failure_alarm" {
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   threshold           = 0
-  period              = 300
+  period              = 600
   statistic           = "Sum"
   
   metric_name = "FailedInvocations"
@@ -877,7 +910,7 @@ module "dlq_event_alarm" {
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   threshold           = 0
-  period              = 300
+  period              = 600
   statistic           = "Sum"
   
   metric_name = "ApproximateNumberOfMessagesVisible"

@@ -2,8 +2,6 @@ import sys
 import json
 from datetime import datetime
 
-import boto3
-
 from awsglue.transforms import *
 from awsgluedq.transforms import EvaluateDataQuality
 from awsglue.dynamicframe import DynamicFrame
@@ -115,10 +113,11 @@ def run_data_quality_check(df, glueContext, df_name, result_s3_prefix):
         additional_options={"observations.scope":"ALL","performanceTuning.caching":"CACHE_NOTHING"}
     )
 
-    # ////////////
-    # GlueJobの停止設定(DQを満たさない場合Jobの停止)
-    # ////////////
-    assert dq_results[EvaluateDataQuality.DATA_QUALITY_RULE_OUTCOMES_KEY].filter(lambda x: x["Outcome"] == "Failed").count() == 0, f"FATAL ERROR: The job failed due to failing DQ rules for {df_name}. Pipeline interrupted."
+# ////////////
+# GlueJobの停止設定(DQを満たさない場合Jobの停止)
+# ////////////
+    assert dq_results[EvaluateDataQuality.DATA_QUALITY_RULE_OUTCOMES_KEY].filter(lambda x: x["Outcome"] == "Failed").count() == 0, \
+        f"FATAL ERROR: The job failed due to failing DQ rules for {df_name}. Run ID: {CORRELATION_ID}. Pipeline interrupted."
     
     return
 
@@ -129,7 +128,7 @@ def run_data_quality_check(df, glueContext, df_name, result_s3_prefix):
 channel_schema = StructType([
     StructField("channel_id", StringType(), False),
     StructField("channel_name", StringType(), False),
-    StructField("published_at", StringType(), False),# 後で処理
+    StructField("published_at", StringType(), False),
     StructField("subscriber_count", LongType(), False),
     StructField("total_views", LongType(), False),
     StructField("video_count", LongType(), False)
