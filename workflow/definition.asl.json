@@ -28,6 +28,16 @@
         }
       },
       "ResultPath": "$.glue_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": [
@@ -47,6 +57,16 @@
       "ResultPath": "$.crawler_result",
       "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
       "Next": "NotifySuccess",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": [
