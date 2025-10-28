@@ -762,7 +762,7 @@ resource "aws_glue_job" "youtube_data_processing_job" {
   description      = "Processes YouTube raw data and loads to the Data Catalog using BigQuery Connection."
   role_arn         = aws_iam_role.glue_job_execution_role.arn 
   glue_version     = "5.0"
-  max_retries      = 0
+  max_retries      = 2
   timeout          = 20
   number_of_workers = 2
   worker_type      = "G.1X"
@@ -779,7 +779,7 @@ resource "aws_glue_job" "youtube_data_processing_job" {
   # Spark UI LogsとTemporary Pathの設定を追加
   default_arguments = {
     "--TempDir"                 = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/tmp/"
-    "--spark-ui-log-path"       = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/logs/spark-ui/"
+    "--spark-event-logs-path"       = "s3://${aws_s3_bucket.s3_data_lake_bucket.id}/logs/spark-ui/"
     "--enable-spark-ui"         = "true"
     
     "--job-language"            = "python"
