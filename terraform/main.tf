@@ -222,6 +222,11 @@ module "lambda_function_failure_alarm" {
   alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
 }
 
+resource "aws_cloudwatch_log_group" "lambda_scraper_logs" {
+  name              = "/aws/lambda/youtube-scraper-lambda"
+  retention_in_days = var.cloudwatch_log_group_retention_in_days
+}
+
 /*
  * SFNの定義
  */
@@ -309,6 +314,16 @@ module "step-function" {
         }
       },
       "ResultPath": "$.glue_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": [
@@ -328,6 +343,16 @@ module "step-function" {
       "ResultPath": "$.crawler_result",
       "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
       "Next": "NotifySuccess",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": [
@@ -374,7 +399,8 @@ module "step-function" {
   }
 }
 EOF
-  cloudwatch_log_group_name = "/prd/data-pipeline/sfn-executions"
+  cloudwatch_log_group_name = "/aws/sfn/youtube-pipeline-executions"
+  cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
 
   service_integrations = {
     glue_Sync = {
@@ -531,6 +557,10 @@ module "eventbridge" {
         attach_role_arn = true
         input_transformer = local.sfn_input_transformer
         dead_letter_arn = module.youtube_event_dlq.queue_arn
+        retry_policy = {
+            maximum_retry_attempts = 2
+            maximum_event_age_in_seconds = 600
+        }
       }
     ]
   }
@@ -566,7 +596,7 @@ module "scheduler_failure_alarm" {
  */
 resource "aws_cloudwatch_log_group" "scheduler_logs" {
   name              = "/aws/events/scheduler/youtube-pipeline-schedules"
-  retention_in_days = 7
+  retention_in_days = var.cloudwatch_log_group_retention_in_days
 }
 
 /*
@@ -753,7 +783,7 @@ resource "aws_glue_job" "youtube_data_processing_job" {
     "--enable-spark-ui"         = "true"
     
     "--job-language"            = "python"
-    "--continuous-log-logGroup" = "/aws-glue/jobs"
+    "--continuous-log-logGroup" = "/aws-glue/jobs/output/youtube-data-processing-job"
     "--enable-continuous-cloudwatch-log" = "true"
     "--enable-continuous-log-filter"     = "true"
     "--enable-metrics"          = "true"
@@ -761,6 +791,11 @@ resource "aws_glue_job" "youtube_data_processing_job" {
     "--gcp_project_id" = "project-youtube-472803"
     "--bq_dataset" = "youtube_project_processed_data"
   }
+}
+
+resource "aws_cloudwatch_log_group" "glue_etl_logs" {
+  name              = "/aws-glue/jobs/output/${aws_glue_job.youtube_data_processing_job.name}"
+  retention_in_days = var.cloudwatch_log_group_retention_in_days
 }
 
 /*

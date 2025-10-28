@@ -46,3 +46,9 @@ variable "glue_database_name" {
   type        = string
   default     = "youtube_analysis_db" 
 }
+
+variable "cloudwatch_log_group_retention_in_days" {
+  description = "CloudWatch Logsの保持期間"
+  type        = number
+  default     = 60
+}
