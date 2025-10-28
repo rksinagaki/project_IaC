@@ -84,7 +84,7 @@ module "youtube_secret" {
 module "youtube_scraper_channel" {
   source = "./modules/lambda"
 
-  function_name          = "youtube-data-scraper"
+  function_name          = "youtube-lambda-scraper"
   ecr_repository_url     = aws_ecr_repository.lambda_ecr_repository.repository_url
   s3_data_lake_bucket_name = aws_s3_bucket.s3_data_lake_bucket.id
   youtube_secret_arn     = module.youtube_secret.secret_arn
@@ -117,11 +117,6 @@ module "lambda_function_failure_alarm" {
   treat_missing_data = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
-}
-
-resource "aws_cloudwatch_log_group" "lambda_scraper_logs" {
-  name              = "/aws/lambda/youtube-scraper-lambda"
-  retention_in_days = var.cloudwatch_log_group_retention_in_days
 }
 
 /*
@@ -197,7 +192,7 @@ module "step-function" {
     },
     "RunGlueJobAndWait": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::glue:startJobRun",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
       "Parameters": {
         "JobName": "${aws_glue_job.youtube_data_processing_job.name}",
         "Arguments": {
@@ -653,6 +648,12 @@ resource "aws_iam_role_policy_attachment" "glue_combined_attach" {
   policy_arn = aws_iam_policy.glue_combined_policy.arn
 }
 
+# Glueのロググループの作成
+resource "aws_cloudwatch_log_group" "glue_etl_logs" {
+  name              = "/aws-glue/jobs/youtube-data-processing-job"
+  retention_in_days = var.cloudwatch_log_group_retention_in_days
+}
+
 # Glueジョブの定義
 resource "aws_glue_job" "youtube_data_processing_job" {
   name             = "youtube-data-processing-job"
@@ -676,23 +677,17 @@ resource "aws_glue_job" "youtube_data_processing_job" {
   # Spark UI LogsとTemporary Pathの設定を追加
   default_arguments = {
     "--TempDir"                 = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/tmp/"
-    "--spark-event-logs-path"       = "s3://${aws_s3_bucket.s3_data_lake_bucket.id}/logs/spark-ui/"
+    "--spark-event-logs-path"   = "s3://${aws_s3_bucket.s3_data_lake_bucket.id}/logs/spark-ui/"
     "--enable-spark-ui"         = "true"
-    
     "--job-language"            = "python"
-    "--continuous-log-logGroup" = "/aws-glue/jobs/output/youtube-data-processing-job"
     "--enable-continuous-cloudwatch-log" = "true"
+    "--continuous-log-logGroup" = aws_cloudwatch_log_group.glue_etl_logs.name
     "--enable-continuous-log-filter"     = "true"
-    "--enable-metrics"          = "true"
+    "--enable-metrics"          = ""
     "--enable-auto-scaling"     = "true"
     "--gcp_project_id" = "project-youtube-472803"
     "--bq_dataset" = "youtube_project_processed_data"
   }
-}
-
-resource "aws_cloudwatch_log_group" "glue_etl_logs" {
-  name              = "/aws-glue/jobs/output/${aws_glue_job.youtube_data_processing_job.name}"
-  retention_in_days = var.cloudwatch_log_group_retention_in_days
 }
 
 /*

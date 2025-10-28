@@ -29,3 +29,9 @@ variable "project_tags" {
   type        = map(string)
   default = {}
 }
+
+variable "log_retention_days" {
+  description = "Lambda logs retention days."
+  type        = number
+  default     = 60
+}

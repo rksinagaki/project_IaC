@@ -113,9 +113,9 @@ resource "aws_lambda_function" "scraper" {
 }
 
 /*
- * CloudWatch Log Groupの定義（モジュールに含める）
+ * CloudWatch Log Groupの定義
  */
 resource "aws_cloudwatch_log_group" "log_group" {
   name              = "/aws/lambda/${var.function_name}"
-  retention_in_days = 30 
+  retention_in_days = var.log_retention_days
 }
