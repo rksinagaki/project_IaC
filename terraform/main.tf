@@ -1,8 +1,8 @@
-/* 現状手動で入力するべき項目
+/* 手動で設定するべき項目
   ・SecretManagerへのGoogle YouTube API Key
   ・SecretMangerへのBigQueryのサービスアカウントキー
   ・Glueのスクリプト
-  ・Lambdaのコンテナイメージ(ECSは作成される)
+  ・Lambdaのコンテナイメージ(先に作っておく必要がある)
 
 /*
  * S3データレイクバケットの作成
@@ -63,8 +63,6 @@ resource "aws_ecr_repository" "lambda_ecr_repository" {
 /*
  * Secret managerの定義(API Keyは手動で設定)
  */
-data "aws_caller_identity" "current" {}
-
 # Secrets Managerの枠組みとポリシーを作成
 module "youtube_secret" {
   source = "terraform-aws-modules/secrets-manager/aws"
@@ -81,124 +79,17 @@ module "youtube_secret" {
 }
 
 /*
- * Lambdaのassume role作成
- */
-resource "aws_iam_role" "lambda_execution_role" {
-  name = "youtube-pipeline-lambda-role"
-  
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Action = "sts:AssumeRole",
-        Effect = "Allow",
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = var.project_tags
-}
-
-/*
- * Lambdaのポリシー設定
- */
-resource "aws_iam_policy" "lambda_combined_execution_policy" {
-  name        = "youtube-pipeline-lambda-combined-policy"
-  description = "YouTube API実行Lambdaに必要な全ての権限（Logs, S3, Secrets）"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      # LambdaのCloudWatch Logsへの書き込み権限
-      {
-        Sid      = "CloudWatchLogsAccess",
-        Effect   = "Allow",
-        Action   = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ],
-        Resource = "arn:aws:logs:*:*:*"
-      },
-
-      # LambdaのS3データレイクへのアクセス権限
-      {
-        Sid      = "S3DataLakeAccess",
-        Effect   = "Allow",
-        Action   = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:ListBucket"
-        ],
-        Resource = [
-          aws_s3_bucket.s3_data_lake_bucket.arn,
-          "${aws_s3_bucket.s3_data_lake_bucket.arn}/*"
-        ]
-      },
-
-      # LambdaのSecret Managerへの読み取り権限
-      {
-        Sid      = "SecretsManagerRead",
-        Effect   = "Allow",
-        Action   = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
-        ],
-        Resource = module.youtube_secret.secret_arn
-      },
-
-      # LambdaのEventBridgeへの引継ぎ権限
-      {
-        Sid      = "EventBridgePutEvents",
-        Effect   = "Allow",
-        Action   = "events:PutEvents",
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-/*
- * Lambdaのポリシーをロールへアタッチ
- */
-resource "aws_iam_role_policy_attachment" "lambda_combined_attach" {
-  role       = aws_iam_role.lambda_execution_role.name
-  policy_arn = aws_iam_policy.lambda_combined_execution_policy.arn 
-}
-
-/*
  * Lambdaの定義
  */
-resource "aws_lambda_function" "youtube_lambda_scraper" {
-  function_name = "youtube-data-scraper"
-  description   = "Scrape youtube data with Google API."
-  package_type = "Image"
-  
-  # dockerイメージのタグはlatestを指定
-  image_uri    = "${aws_ecr_repository.lambda_ecr_repository.repository_url}:latest"  
-  role         = aws_iam_role.lambda_execution_role.arn
-  
-  image_config {
-    command = ["app_lambda.lambda_handler"]
-  }
+module "youtube_scraper_channel" {
+  source = "./modules/lambda"
 
-  environment {
-    variables = {
-      BUCKET_NAME = var.data_bucket_name
-      REGION_NAME = var.region_name
-      YOUTUBE_API_KEY_ARN = module.youtube_secret.secret_arn
-    }
-  }
-
-  timeout      = 300 
-  memory_size  = 256
-  
-  depends_on = [
-    aws_ecr_repository.lambda_ecr_repository,
-  ]
+  function_name          = "youtube-lambda-scraper"
+  ecr_repository_url     = aws_ecr_repository.lambda_ecr_repository.repository_url
+  s3_data_lake_bucket_name = aws_s3_bucket.s3_data_lake_bucket.id
+  youtube_secret_arn     = module.youtube_secret.secret_arn
+  region_name            = var.region_name
+  project_tags           = var.project_tags
 }
 
 /*
@@ -220,17 +111,12 @@ module "lambda_function_failure_alarm" {
   namespace   = "AWS/Lambda"
 
   dimensions = { 
-    FunctionName = aws_lambda_function.youtube_lambda_scraper.function_name
+    FunctionName = module.youtube_scraper_channel.lambda_name
   }
 
   treat_missing_data = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
-}
-
-resource "aws_cloudwatch_log_group" "lambda_scraper_logs" {
-  name              = "/aws/lambda/youtube-scraper-lambda"
-  retention_in_days = var.cloudwatch_log_group_retention_in_days
 }
 
 /*
@@ -306,7 +192,7 @@ module "step-function" {
     },
     "RunGlueJobAndWait": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::glue:startJobRun",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
       "Parameters": {
         "JobName": "${aws_glue_job.youtube_data_processing_job.name}",
         "Arguments": {
@@ -463,10 +349,10 @@ locals {
       lambda_output = "$.detail"
     }
     input_template = <<EOT
-{
-  "lambda_output": <lambda_output>
-}
-EOT
+      {
+        "lambda_output": <lambda_output>
+      }
+    EOT
   }
 }
 
@@ -482,14 +368,14 @@ module "eventbridge" {
   # スケジュールベースの Lambda 実行設定 (最初のブロックの内容)
   # Lambdaへの実行権限をモジュールに自動で設定させる
   attach_lambda_policy = true 
-  lambda_target_arns   = [aws_lambda_function.youtube_lambda_scraper.arn]
+  lambda_target_arns   = [module.youtube_scraper_channel.lambda_arn]
 
   schedules = {
     sukima_schedule = {
       description         = "Lambda trigger schedule for Channel Sukima-Switch"
       schedule_expression = "cron(0 6 ? * FRI *)"
       timezone            = "Asia/Tokyo"
-      arn                 = aws_lambda_function.youtube_lambda_scraper.arn 
+      arn                 = module.youtube_scraper_channel.lambda_arn 
       input = jsonencode({
         ARTIST_NAME_SLUG = "sukima-switch",
         ARTIST_NAME_DISPLAY = "スキマスイッチ",
@@ -516,7 +402,7 @@ module "eventbridge" {
       description         = "Lambda trigger schedule for Channel Ikimono-Gakari"
       schedule_expression = "cron(0 6 ? * MON *)"
       timezone            = "Asia/Tokyo"
-      arn                 = aws_lambda_function.youtube_lambda_scraper.arn 
+      arn                 = module.youtube_scraper_channel.lambda_arn 
       input = jsonencode({
         ARTIST_NAME_SLUG = "ikimonogakari",
         ARTIST_NAME_DISPLAY = "いきものがかり",
@@ -762,6 +648,12 @@ resource "aws_iam_role_policy_attachment" "glue_combined_attach" {
   policy_arn = aws_iam_policy.glue_combined_policy.arn
 }
 
+# Glueのロググループの作成
+resource "aws_cloudwatch_log_group" "glue_etl_logs" {
+  name              = "/aws-glue/jobs/youtube-data-processing-job"
+  retention_in_days = var.cloudwatch_log_group_retention_in_days
+}
+
 # Glueジョブの定義
 resource "aws_glue_job" "youtube_data_processing_job" {
   name             = "youtube-data-processing-job"
@@ -785,23 +677,17 @@ resource "aws_glue_job" "youtube_data_processing_job" {
   # Spark UI LogsとTemporary Pathの設定を追加
   default_arguments = {
     "--TempDir"                 = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/tmp/"
-    "--spark-event-logs-path"       = "s3://${aws_s3_bucket.s3_data_lake_bucket.id}/logs/spark-ui/"
+    "--spark-event-logs-path"   = "s3://${aws_s3_bucket.s3_data_lake_bucket.id}/logs/spark-ui/"
     "--enable-spark-ui"         = "true"
-    
     "--job-language"            = "python"
-    "--continuous-log-logGroup" = "/aws-glue/jobs/output/youtube-data-processing-job"
     "--enable-continuous-cloudwatch-log" = "true"
+    "--continuous-log-logGroup" = aws_cloudwatch_log_group.glue_etl_logs.name
     "--enable-continuous-log-filter"     = "true"
-    "--enable-metrics"          = "true"
+    "--enable-metrics"          = ""
     "--enable-auto-scaling"     = "true"
     "--gcp_project_id" = "project-youtube-472803"
     "--bq_dataset" = "youtube_project_processed_data"
   }
-}
-
-resource "aws_cloudwatch_log_group" "glue_etl_logs" {
-  name              = "/aws-glue/jobs/output/${aws_glue_job.youtube_data_processing_job.name}"
-  retention_in_days = var.cloudwatch_log_group_retention_in_days
 }
 
 /*

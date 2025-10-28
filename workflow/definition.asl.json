@@ -14,7 +14,7 @@
     },
     "RunGlueJobAndWait": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::glue:startJobRun",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
       "Parameters": {
         "JobName": "${aws_glue_job.youtube_data_processing_job.name}",
         "Arguments": {
