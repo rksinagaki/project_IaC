@@ -1,3 +1,9 @@
+/* 現状手動で入力するべき項目
+  ・SecretManagerへのGoogle YouTube API Key
+  ・SecretMangerへのBigQueryのサービスアカウントキー
+  ・Glueのスクリプト
+  ・Lambdaのコンテナイメージ(ECSは作成される)
+
 /*
  * S3データレイクバケットの作成
  */
