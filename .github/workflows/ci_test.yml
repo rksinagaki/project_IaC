@@ -3,7 +3,7 @@ name: Continuous Integration (CI) Pipeline
 on:
   push:
     branches:
-      - 'main' # 全てのブランチで実行
+      - 'main'
   pull_request:
     branches:
       - main
