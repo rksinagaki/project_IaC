@@ -24,7 +24,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: 認証成功の確認 (テスト用コマンド)
+      - name: 認証成功の確認 (テスト用コマンドA)
         run: |
           echo "Successfully assumed the role!"
           aws sts get-caller-identity
