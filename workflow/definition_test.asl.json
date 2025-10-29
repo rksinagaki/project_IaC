@@ -41,20 +41,6 @@
       "Catch": [
         {
           "ErrorEquals": [
-            "Glue.ConcurrentRunsExceededException"
-          ],
-          "ResultPath": "$.ErrorDetails",
-          "Next": "NotifyFailure"
-        },
-        {
-          "ErrorEquals": [
-            "Glue.AccessDeniedException"
-          ],
-          "ResultPath": "$.ErrorDetails",
-          "Next": "NotifyFailure"
-        },
-        {
-          "ErrorEquals": [
             "States.ALL"
           ],
           "ResultPath": "$.ErrorDetails",
@@ -83,20 +69,6 @@
       "Catch": [
         {
           "ErrorEquals": [
-            "Glue.ConcurrentRunsExceededException"
-          ],
-          "ResultPath": "$.ErrorDetails",
-          "Next": "NotifyFailure"
-        },
-        {
-          "ErrorEquals": [
-            "Glue.AccessDeniedException"
-          ],
-          "ResultPath": "$.ErrorDetails",
-          "Next": "NotifyFailure"
-        },
-        {
-          "ErrorEquals": [
             "States.ALL"
           ],
           "ResultPath": "$.ErrorDetails",
@@ -107,7 +79,7 @@
     },
     "WaitForCrawler": {
       "Type": "Wait",
-      "Seconds": 30,
+      "Seconds": 90,
       "Next": "GetCrawlerStatus"
     },
     "GetCrawlerStatus": {
