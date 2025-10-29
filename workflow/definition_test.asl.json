@@ -79,7 +79,7 @@
     },
     "WaitForCrawler": {
       "Type": "Wait",
-      "Seconds": 90,
+      "Seconds": 30,
       "Next": "GetCrawlerStatus"
     },
     "GetCrawlerStatus": {
@@ -107,6 +107,26 @@
           "Variable": "$.Crawler.State",
           "StringEquals": "READY",
           "Next": "CheckLastCrawlResult"
+        }
+      ],
+      "Default": "IncrementRetry"
+    },
+    "IncrementRetry": {
+      "Type": "Pass",
+      "Parameters": {
+        "retry_count.$": "States.MathAdd($.retry_count, 1)",
+        "max_retries": 5
+      },
+      "ResultPath": "$.retry_meta",
+      "Next": "CheckRetryLimit"
+    },
+    "CheckRetryLimit": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.retry_meta.retry_count",
+          "NumericGreaterThanEquals": 5,
+          "Next": "NotifyFailure"
         }
       ],
       "Default": "WaitForCrawler"
