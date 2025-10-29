@@ -35,6 +35,7 @@ jobs:
       - name: コードのチェックアウト
         uses: actions/checkout@v4
 
+      # ここから(OIDC用のIAMロールの変更も含めて対応)
       # --- AWS OIDC 認証 ---
       - name: AWS認証情報の構成 (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -72,7 +73,7 @@ jobs:
           aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
             --region ${{ secrets.AWS_REGION }}
 
-      # --- 3. Terraformによるインフラの適用 ---
+      # --- 3. Terraformによるインフラ構築OK
       - name: Terraformのセットアップ
         uses: hashicorp/setup-terraform@v3
         with:
@@ -80,7 +81,7 @@ jobs:
           
       - name: Terraform Init
         run: terraform init
-        working-directory: ${{ env.TF_WORKING_DIR }} # Terraformファイルのディレクトリを指定
+        working-directory: ${{ env.TF_WORKING_DIR }}
 
       - name: Terraform Plan (変更の確認)
         # 環境変数 (ECRの最新イメージURIなど) を渡す必要がある場合は -var オプションを使用
@@ -88,6 +89,5 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
 
       - name: Terraform Apply (デプロイ実行)
-        # "-auto-approve" で対話なしにデプロイを自動実行
         run: terraform apply -auto-approve
         working-directory: ${{ env.TF_WORKING_DIR }}
