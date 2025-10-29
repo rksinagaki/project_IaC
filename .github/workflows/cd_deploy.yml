@@ -1,52 +1,63 @@
-name: Continuous Deployment (CD) Pipeline
+name: Continuous Deployment (CD) Pipeline with Terraform
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
+# 環境変数
 env:
-  ECR_REPOSITORY: your-lambda-ecr-repo-name # ECRリポジトリ名
-  LAMBDA_FUNCTION_NAME: your-scraper-lambda-name
+  # ECR/Lambda 設定
+  ECR_REPOSITORY: youtube-lambda-scraper-repository
+  LAMBDA_DOCKERFILE_PATH: ./Dockerfile.lambda
   
-  GLUE_SCRIPT_BUCKET: your-glue-script-bucket-name
-  GLUE_SCRIPT_PATH: scripts/latest/app_glue.py # S3上のパス
+  # Glue Job 設定
+  GLUE_SCRIPT_BUCKET: youtube-glue-job-script-1016
+  GLUE_SCRIPT_LOCAL_PATH: ./src/glue/app_glue.py
+  GLUE_SCRIPT_S3_PATH: jobs/youtube_processor.py
+
+  # Terraform 設定
+  TF_WORKING_DIR: ./terraform
+  TF_VERSION: 1.13.4
 
 jobs:
   cd:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    
+    # OIDC認証に必要な権限
     permissions:
       id-token: write 
       contents: read
     
     steps:
-      - name: 💻 コードのチェックアウト
+      - name: コードのチェックアウト
         uses: actions/checkout@v4
 
       # --- AWS OIDC 認証 ---
-      - name: 🔑 AWS認証情報の構成 (OIDC)
+      - name: AWS認証情報の構成 (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
       # --- ECR ログイン ---
-      - name: 🐳 ECRへログイン
+      - name:  ECRへログイン
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         
-      # --- Lambda デプロイ (コンテナ) ---
-      - name: 🏗️ Dockerイメージのビルドとタグ付け
+      # --- 1. Lambda コンテナイメージのビルドとプッシュ ---
+      - name: Dockerイメージのビルドとタグ付け (ECR)
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Dockerfileのパスを確認し、必要に応じて修正してください
-          docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ./src/lambda/ 
+          # Dockerfileのパスを確認してください
+          docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ${{ env.LAMBDA_DOCKERFILE_PATH }} .
           docker tag ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
-      - name: ⏫ ECRへイメージをプッシュ
+      - name: ECRへイメージをプッシュ
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -54,18 +65,29 @@ jobs:
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
-      - name: 🔄 LambdaのイメージURIを更新
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      # --- 2. Glue JobスクリプトのS3へのアップロード ---
+      - name: Glue JobスクリプトをS3にアップロード
         run: |
-          aws lambda update-function-code \
-            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-            --image-uri ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest \
+          # ローカルパスからS3バケットへスクリプトをコピー
+          aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
             --region ${{ secrets.AWS_REGION }}
 
-      # --- Glue Job デプロイ (S3) ---
-      - name: ⬆️ Glue JobスクリプトをS3にアップロード
-        run: |
-          # Glueスクリプトのローカルパスを確認してください
-          aws s3 cp src/glue/app_glue.py s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_PATH }} \
-            --region ${{ secrets.AWS_REGION }}
+      # --- 3. Terraformによるインフラの適用 ---
+      - name: Terraformのセットアップ
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }} # Terraformファイルのディレクトリを指定
+
+      - name: Terraform Plan (変更の確認)
+        # 環境変数 (ECRの最新イメージURIなど) を渡す必要がある場合は -var オプションを使用
+        run: terraform plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      - name: Terraform Apply (デプロイ実行)
+        # "-auto-approve" で対話なしにデプロイを自動実行
+        run: terraform apply -auto-approve
+        working-directory: ${{ env.TF_WORKING_DIR }}

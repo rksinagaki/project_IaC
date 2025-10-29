@@ -6,7 +6,7 @@ import pandas as pd
 from googleapiclient.discovery import build
 from aws_lambda_powertools import Logger
 
-logger = Logger()     
+logger = Logger()
 secretsmanager_client = boto3.client('secretsmanager')
 
 # シークレットを取得する関数
