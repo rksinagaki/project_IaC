@@ -6,7 +6,7 @@ on:
       - feature/DQ
   workflow_dispatch:
 
-env:
+# env:
 
 jobs:
   test_auth:
