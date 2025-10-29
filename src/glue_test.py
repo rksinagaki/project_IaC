@@ -123,7 +123,7 @@ def run_data_quality_check(df, glueContext, df_name, result_s3_prefix):
     dq_failed_count = outcomes_df.filter(F.col("Outcome") == "Failed").count()
 
     if dq_failed_count > 0:
-        dq_failed_rules = outcomes_df.filter(F.col("Outcome") == "Failed").collect() # コスト注意
+        dq_failed_rules = outcomes_df.filter(F.col("Outcome") == "Failed").collect()
         for rule in dq_failed_rules:
             log_json(
                 "DQ Rule Failed. Data will NOT be committed.",

@@ -16,7 +16,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::glue:startJobRun.sync",
       "Parameters": {
-        "JobName": "${aws_glue_job.youtube_data_processing_job.name}",
+        "JobName": "youtube-data-processing-job",
         "Arguments": {
           "--artist_name_slug.$": "$.decoded_payload.artist_name_slug",
           "--correlation_id.$": "$.decoded_payload.correlation_id",
@@ -41,6 +41,20 @@
       "Catch": [
         {
           "ErrorEquals": [
+            "Glue.ConcurrentRunsExceededException"
+          ],
+          "ResultPath": "$.ErrorDetails",
+          "Next": "NotifyFailure"
+        },
+        {
+          "ErrorEquals": [
+            "Glue.AccessDeniedException"
+          ],
+          "ResultPath": "$.ErrorDetails",
+          "Next": "NotifyFailure"
+        },
+        {
+          "ErrorEquals": [
             "States.ALL"
           ],
           "ResultPath": "$.ErrorDetails",
@@ -48,16 +62,14 @@
         }
       ],
       "Next": "StartCrawler",
-      "TimeoutSeconds": 450
+      "TimeoutSeconds": 300
     },
     "StartCrawler": {
       "Type": "Task",
-      "Parameters": {
-        "Name": "${aws_glue_crawler.youtube_processed_data_crawler.name}"
-      },
-      "ResultPath": "$.crawler_result",
       "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
-      "Next": "NotifySuccess",
+      "Parameters": {
+        "Name": "youtube_processed_data_crawler"
+      },
       "Retry": [
         {
           "ErrorEquals": [
@@ -71,19 +83,82 @@
       "Catch": [
         {
           "ErrorEquals": [
+            "Glue.ConcurrentRunsExceededException"
+          ],
+          "ResultPath": "$.ErrorDetails",
+          "Next": "NotifyFailure"
+        },
+        {
+          "ErrorEquals": [
+            "Glue.AccessDeniedException"
+          ],
+          "ResultPath": "$.ErrorDetails",
+          "Next": "NotifyFailure"
+        },
+        {
+          "ErrorEquals": [
             "States.ALL"
           ],
-          "Next": "NotifyFailure",
-          "Comment": "Crawler Failure"
+          "ResultPath": "$.ErrorDetails",
+          "Next": "NotifyFailure"
         }
       ],
-      "TimeoutSeconds": 450
+      "Next": "WaitForCrawler"
     },
-    "NotifySuccess": { 
+    "WaitForCrawler": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "GetCrawlerStatus"
+    },
+    "GetCrawlerStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "youtube_processed_data_crawler"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "CheckCrawlerStatus"
+    },
+    "CheckCrawlerStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.Crawler.State",
+          "StringEquals": "READY",
+          "Next": "CheckLastCrawlResult"
+        }
+      ],
+      "Default": "WaitForCrawler"
+    },
+    "CheckLastCrawlResult": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.Crawler.LastCrawl.Status",
+          "StringEquals": "SUCCEEDED",
+          "Next": "NotifySuccess"
+        },
+        {
+          "Variable": "$.Crawler.LastCrawl.Status",
+          "StringEquals": "FAILED",
+          "Next": "NotifyFailure"
+        }
+      ]
+    },
+    "NotifySuccess": {
       "Type": "Task",
       "Resource": "arn:aws:states:::sns:publish",
       "Parameters": {
-        "TopicArn": "${aws_sns_topic.alert_topic_sfn.arn}", 
+        "TopicArn": "arn:aws:sns:ap-northeast-1:879363564916:youtube-etl-alert-topic",
         "Message.$": "States.Format('ETL Pipeline SUCCESS ID: {}', $.decoded_payload.correlation_id)",
         "MessageAttributes": {
           "Status": {
@@ -98,7 +173,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::sns:publish",
       "Parameters": {
-        "TopicArn": "${aws_sns_topic.alert_topic_sfn.arn}",
+        "TopicArn": "arn:aws:sns:ap-northeast-1:879363564916:youtube-etl-alert-topic",
         "Message.$": "States.Format('ETL Pipeline FAILED for ID: {}. Error: {}', $.decoded_payload.correlation_id, $.ErrorDetails.Cause)",
         "MessageAttributes": {
           "Status": {
