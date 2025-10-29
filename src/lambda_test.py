@@ -6,28 +6,41 @@ import pandas as pd
 from googleapiclient.discovery import build
 from aws_lambda_powertools import Logger
 
-# シークレットを取得する関数
+logger = Logger()     
 secretsmanager_client = boto3.client('secretsmanager')
-SECRET_ARN = os.environ.get('YOUTUBE_API_KEY_ARN')
+
+# シークレットを取得する関数
 def get_youtube_api_key(secret_arn):
-    response = secretsmanager_client.get_secret_value(SecretId=secret_arn)
-    secret_data = json.loads(response['SecretString'])
-    return secret_data['API_KEY']
+    try:
+        response = secretsmanager_client.get_secret_value(SecretId=secret_arn)
+        secret_data = json.loads(response['SecretString'])
+
+        api_key = secret_data.get('API_KEY')
+        if not api_key:
+            raise KeyError("Secret内に 'API_KEY' が存在しません。")
+        
+        return api_key
+        
+    except Exception as e:
+        logger.error(f"予期しないエラーが発生しました: {e}")
+        raise
 
 # /////////////////
 # 環境変数読み込み
 # /////////////////
 BUCKET_NAME = os.environ.get('BUCKET_NAME')
 REGION_NAME = os.environ.get('REGION_NAME')
-API_KEY = get_youtube_api_key(SECRET_ARN)
+SECRET_ARN = os.environ.get('YOUTUBE_API_KEY_ARN')
 EVENT_SOURCE = 'my-scraper' # 後で変更
 EVENT_DETAIL_TYPE = 'ScrapingCompleted' # 後で変更
 
-youtube = build('youtube',
-                'v3',
-                developerKey=API_KEY
-                )
-logger = Logger()
+# API KEYを取得
+try:
+    API_KEY = get_youtube_api_key(SECRET_ARN)
+    youtube = build('youtube', 'v3', developerKey=API_KEY)
+except Exception as e:
+    logger.exception("初期化処理に失敗しました。Lambdaを終了します。")
+    raise e
 
 # /////////////////
 # チャンネル情報の取得
