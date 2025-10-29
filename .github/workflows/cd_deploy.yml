@@ -1,0 +1,71 @@
+name: Continuous Deployment (CD) Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ECR_REPOSITORY: your-lambda-ecr-repo-name # ECRリポジトリ名
+  LAMBDA_FUNCTION_NAME: your-scraper-lambda-name
+  
+  GLUE_SCRIPT_BUCKET: your-glue-script-bucket-name
+  GLUE_SCRIPT_PATH: scripts/latest/app_glue.py # S3上のパス
+
+jobs:
+  cd:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write 
+      contents: read
+    
+    steps:
+      - name: 💻 コードのチェックアウト
+        uses: actions/checkout@v4
+
+      # --- AWS OIDC 認証 ---
+      - name: 🔑 AWS認証情報の構成 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # --- ECR ログイン ---
+      - name: 🐳 ECRへログイン
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      # --- Lambda デプロイ (コンテナ) ---
+      - name: 🏗️ Dockerイメージのビルドとタグ付け
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Dockerfileのパスを確認し、必要に応じて修正してください
+          docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ./src/lambda/ 
+          docker tag ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+
+      - name: ⏫ ECRへイメージをプッシュ
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+
+      - name: 🔄 LambdaのイメージURIを更新
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --image-uri ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest \
+            --region ${{ secrets.AWS_REGION }}
+
+      # --- Glue Job デプロイ (S3) ---
+      - name: ⬆️ Glue JobスクリプトをS3にアップロード
+        run: |
+          # Glueスクリプトのローカルパスを確認してください
+          aws s3 cp src/glue/app_glue.py s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_PATH }} \
+            --region ${{ secrets.AWS_REGION }}

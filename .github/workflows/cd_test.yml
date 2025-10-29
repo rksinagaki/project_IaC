@@ -1,0 +1,33 @@
+name: OIDC Authentication Test
+
+on:
+  push:
+    branches:
+      - feature/DQ
+  workflow_dispatch:
+
+env:
+
+jobs:
+  test_auth:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      id-token: write 
+      contents: read
+    
+    steps:
+      - name: 💻 コードのチェックアウト (必須ではないが慣例として含める)
+        uses: actions/checkout@v4
+
+      # --- 認証テストの核心 ---
+      - name: 🔑 AWS認証情報の構成 (OIDC)を試行
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: ✅ 認証成功の確認 (テスト用コマンド)
+        run: |
+          echo "Successfully assumed the role!"
+          aws sts get-caller-identity
