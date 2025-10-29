@@ -1,12 +1,9 @@
 name: OIDC Authentication Test
-
 on:
   push:
     branches:
       - feature/DQ
   workflow_dispatch:
-
-# env:
 
 jobs:
   test_auth:
