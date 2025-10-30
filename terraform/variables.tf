@@ -52,3 +52,15 @@ variable "cloudwatch_log_group_retention_in_days" {
   type        = number
   default     = 60
 }
+
+variable "youtube_api_key" {
+  description = "YouTube Data API Key"
+  type        = string
+  sensitive   = true
+}
+
+variable "bigquery_sa_key_json" {
+  description = "GCP Service Account Key JSON"
+  type        = string
+  sensitive   = true
+}

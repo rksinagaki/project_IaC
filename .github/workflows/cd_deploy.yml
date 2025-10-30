@@ -74,12 +74,27 @@ jobs:
         run: terraform validate
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform Plan (変更の確認)
-        run: terraform plan
+      - name: Terraform Plan
+        id: plan
+        run: |
+          # Secretsを -var オプションで渡し、Terraform変数に値を注入
+          terraform plan -no-color \
+          -var="youtube_api_key=${{ secrets.YOUTUBE_API_KEY }}" \
+          -var="gcp_sa_key_json=${{ secrets.GCP_SA_KEY_JSON }}" \
+          -out=tfplan
+        env:
+          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
+          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform Apply (デプロイ実行)
-        run: terraform apply -auto-approve
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply tfplan
+        env:
+          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
+          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
         working-directory: ${{ env.TF_WORKING_DIR }}
 
       # --- Glue JobスクリプトのS3へのアップロード

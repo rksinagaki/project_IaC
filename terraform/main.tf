@@ -72,9 +72,7 @@ module "youtube_secret" {
   description             = "YouTube Data API Key for data scraper"
   recovery_window_in_days = 14
   create_random_password = false 
-  secret_string = jsonencode({
-    API_KEY = "PLACEHOLDER" # 後で手動で入れる
-  })
+  secret_string = var.youtube_api_key
   create_policy = false
 }
 
@@ -520,19 +518,7 @@ module "bigquery_secret" {
   description             = "BigQuery service account key for project-youtube"
   recovery_window_in_days = 14
   create_random_password = false 
-  secret_string = jsonencode({
-    "type": "PLACEHOLDER",
-    "project_id": "PLACEHOLDER",
-    "private_key_id": "PLACEHOLDER",
-    "private_key": "PLACEHOLDER",
-    "client_email": "PLACEHOLDER",
-    "client_id": "PLACEHOLDER",
-    "auth_uri": "PLACEHOLDER",
-    "token_uri": "PLACEHOLDER",
-    "auth_provider_x509_cert_url": "PLACEHOLDER",
-    "client_x509_cert_url": "PLACEHOLDER",
-    "universe_domain": "PLACEHOLDER"
-  })
+  secret_string = var.bigquery_sa_key_json
   create_policy = false #　後で作る
 }
 
