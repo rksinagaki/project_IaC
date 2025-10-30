@@ -2,8 +2,6 @@ import sys
 import json
 from datetime import datetime
 
-import boto3
-
 from awsglue.transforms import *
 from awsgluedq.transforms import EvaluateDataQuality
 from awsglue.dynamicframe import DynamicFrame
@@ -103,18 +101,46 @@ def run_data_quality_check(df, glueContext, df_name, result_s3_prefix):
         ]
         """
 
-    dq_results = EvaluateDataQuality.apply(
-        frame=dyf_to_check,
-        ruleset=dqdl_ruleset,
+    dq_results = EvaluateDataQuality().process_rows(
+        frame=dyf_to_check, 
+        ruleset=dqdl_ruleset, 
         publishing_options={
-            "dataQualityEvaluationContext": df_name,
-            "enableDataQualityResultsPublishing": True,
-            "resultsS3Prefix": result_s3_prefix
-        }
+            "dataQualityEvaluationContext": f"{df_name}", 
+            "enableDataQualityCloudWatchMetrics": False, 
+            "enableDataQualityResultsPublishing": True, 
+            "resultsS3Prefix": f"{result_s3_prefix}"
+        }, 
+        additional_options={"observations.scope":"ALL","performanceTuning.caching":"CACHE_NOTHING"}
     )
-    dq_df = dq_results.toDF()
+
+# ////////////
+# GlueJobの停止設定(DQを満たさない場合Jobの停止)
+# ////////////
+    dq_failed_rules = []
+
+    outcomes_dyf = dq_results[EvaluateDataQuality.DATA_QUALITY_RULE_OUTCOMES_KEY]
+    outcomes_df = outcomes_dyf.toDF()
+    dq_failed_count = outcomes_df.filter(F.col("Outcome") == "Failed").count()
+
+    if dq_failed_count > 0:
+        dq_failed_rules = outcomes_df.filter(F.col("Outcome") == "Failed").collect()
+        for rule in dq_failed_rules:
+            log_json(
+                "DQ Rule Failed. Data will NOT be committed.",
+                level="FATAL",
+                extra={
+                    "data_frame": df_name,
+                "rule_outcome": rule["Outcome"],
+                "rule_type": rule["Rule"],
+                "failure_reason": rule["FailureReason"],
+                "evaluated_metrics": dict(rule["EvaluatedMetrics"])
+                }
+            )
     
-    return dq_df
+    assert len(dq_failed_rules) == 0, \
+        f"FATAL ERROR: The job failed due to failing DQ rules for {df_name}. Run ID: {CORRELATION_ID}. Pipeline interrupted."
+    
+    return
 
 # ////////////
 # スキーマ設計
@@ -123,7 +149,7 @@ def run_data_quality_check(df, glueContext, df_name, result_s3_prefix):
 channel_schema = StructType([
     StructField("channel_id", StringType(), False),
     StructField("channel_name", StringType(), False),
-    StructField("published_at", StringType(), False),# 後で処理
+    StructField("published_at", StringType(), False),
     StructField("subscriber_count", LongType(), False),
     StructField("total_views", LongType(), False),
     StructField("video_count", LongType(), False)
@@ -160,13 +186,11 @@ df_channel = spark.read.schema(channel_schema).json(S3_INPUT_PATH_CHANNEL)
 df_video = spark.read.schema(video_schema).json(S3_INPUT_PATH_VIDEO)
 df_comment = spark.read.schema(comment_schema).json(S3_INPUT_PATH_COMMENT)
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("S3からデータの読み込みが完了しました。")
 
 # ////////////
 # データ型変換
 # ////////////
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("データ型の変換を開始しました。")
 
 # channelデータ型変更
@@ -199,13 +223,11 @@ df_comment = df_comment.withColumn(
     F.col('published_at').cast('timestamp')
 )
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("データ型の変換が完了しました。")
 
 # ////////////
 # 欠損、重複値処理(必ず欠損→重複の順番で処理を行う)
 # ////////////
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("欠損値、重複値の処理を開始しました。")
 
 # 欠損値の処理
@@ -234,13 +256,11 @@ window_comment = Window.partitionBy('comment_id').orderBy(F.col('published_at').
 df_comment_ranked = df_comment.withColumn('rank', F.row_number().over(window_comment))
 df_comment = df_comment_ranked.filter(F.col('rank')==1).drop('rank')
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("欠損値、重複値の処理が完了しました。")
 
 # ////////////
 # DataQualityの実行
 # ////////////
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("データクオリティーの実施を開始しました。S3へレポートの出力を行います。")
 
 run_data_quality_check(
@@ -264,27 +284,23 @@ run_data_quality_check(
     f"s3://{REPORT_BASE_PATH}comment/"
     )
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("データクオリティーの実施が完了しました。S3へレポートを出力しました。")
     
 # ////////////
 # S3へデータの格納
 # ////////////
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("S3へ加工データの格納を開始しました。")
 
 df_channel.write.mode("overwrite").parquet(f"s3://{PROCESSED_BASE_PATH}processed_channel")
 df_video.write.mode("overwrite").parquet(f"s3://{PROCESSED_BASE_PATH}processed_video")
 df_comment.write.mode("overwrite").parquet(f"s3://{PROCESSED_BASE_PATH}processed_comment")
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("S3へ加工データの格納が完了しました。")
 
 # ////////////
 # BigQueryへデータの格納
 # ////////////
 # BQへチャンネルデータの格納
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("BigQueryへのチャンネルデータの書き込みを開始しました。")
 
 dynamic_channel = DynamicFrame.fromDF(df_channel, glueContext, "converted_frame")
@@ -300,11 +316,9 @@ glueContext.write_dynamic_frame.from_options(
     }
 )
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("BigQueryへのチャンネルデータの書き込みを完了しました。")
 
 # BQへビデオデータの格納
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("BigQueryへのビデオデータの書き込みを開始しました。")
 
 dynamic_video = DynamicFrame.fromDF(df_video, glueContext, "converted_frame")
@@ -320,11 +334,9 @@ glueContext.write_dynamic_frame.from_options(
     }
 )
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("BigQueryへのビデオデータの書き込みを完了しました。")
 
 # BQへコメントデータの格納
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("BigQueryへのコメントデータの書き込みを開始しました。")
 
 dynamic_comment = DynamicFrame.fromDF(df_comment, glueContext, "converted_frame")
@@ -340,7 +352,6 @@ glueContext.write_dynamic_frame.from_options(
     }
 )
 
-spark_logger.info("--- Spark Action completed. Flushing log buffer. ---")
 log_json("BigQueryへのコメントデータの書き込みを完了しました。")
 log_json("Glueジョブが正常に完了しました。")
 
