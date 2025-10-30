@@ -1,8 +1,8 @@
 /* 手動で設定するべき項目
+  ・Lambdaのコンテナイメージ(先に作っておく必要がある)
   ・SecretManagerへのGoogle YouTube API Key
   ・SecretMangerへのBigQueryのサービスアカウントキー
   ・Glueのスクリプト
-  ・Lambdaのコンテナイメージ(先に作っておく必要がある)
 
 /*
  * S3データレイクバケットの作成

@@ -11,6 +11,8 @@ env:
   # ECR/Lambda 設定
   ECR_REPOSITORY: youtube-lambda-scraper-repository
   LAMBDA_DOCKERFILE_PATH: ./Dockerfile.lambda
+  ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+  IMAGE_TAG: ${{ github.sha }}
   
   # Glue Job 設定
   GLUE_SCRIPT_BUCKET: youtube-glue-job-script-1016
@@ -35,45 +37,36 @@ jobs:
       - name: コードのチェックアウト
         uses: actions/checkout@v4
 
-      # ここから(OIDC用のIAMロールの変更も含めて対応)
-      # --- AWS OIDC 認証 ---
+      # --- AWS OIDC 認証
       - name: AWS認証情報の構成 (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # --- ECR ログイン ---
+      # --- ECR ログイン
       - name:  ECRへログイン
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         
-      # --- 1. Lambda コンテナイメージのビルドとプッシュ ---
+      # --- Lambda コンテナイメージのビルドとプッシュ
       - name: Dockerイメージのビルドとタグ付け (ECR)
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          # Dockerfileのパスを確認してください
+        run: |          
           docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ${{ env.LAMBDA_DOCKERFILE_PATH }} .
           docker tag ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
       - name: ECRへイメージをプッシュ
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
-      # --- 2. Glue JobスクリプトのS3へのアップロード ---
+      # --- Glue JobスクリプトのS3へのアップロード
       - name: Glue JobスクリプトをS3にアップロード
         run: |
-          # ローカルパスからS3バケットへスクリプトをコピー
           aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
             --region ${{ secrets.AWS_REGION }}
 
-      # --- 3. Terraformによるインフラ構築OK
+      # --- Terraformによるインフラ構築OK
       - name: Terraformのセットアップ
         uses: hashicorp/setup-terraform@v3
         with:
@@ -83,8 +76,11 @@ jobs:
         run: terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
 
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
       - name: Terraform Plan (変更の確認)
-        # 環境変数 (ECRの最新イメージURIなど) を渡す必要がある場合は -var オプションを使用
         run: terraform plan
         working-directory: ${{ env.TF_WORKING_DIR }}
 
