@@ -1,9 +1,12 @@
 name: Continuous Deployment (CD) Pipeline with Terraform
+
 on:
   push:
     branches:
       - 'main'
-  # workflow_dispatch:
+  pull_request:
+    branches:
+      - 'main'
 
 # 環境変数
 env:

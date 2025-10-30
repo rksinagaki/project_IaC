@@ -1,9 +1,9 @@
 # name: OIDC Authentication Test
+
 # on:
 #   push:
 #     branches:
 #       - 'main'
-#   workflow_dispatch:
 
 # jobs:
 #   test_auth:
