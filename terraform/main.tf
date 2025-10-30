@@ -718,6 +718,7 @@ resource "google_bigquery_dataset" "bq_data_set" {
   description                 = "AWS Glueからの加工データを受け取るためのデータセット"
   location                    = var.gcp_region
   project = var.gcp_project_id
+  delete_contents_on_destroy = true # 注意：破壊用に一時的に設定
 }
 
 # BQスキーマの定義
