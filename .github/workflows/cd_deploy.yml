@@ -78,6 +78,11 @@ jobs:
       - name: Terraform Init
         run: terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
+
+      - name: GCPサービスアカウントキーのセットアップ
+        run: |
+          echo "${{ secrets.BIGQUERY_SA_KEY_JSON }}" > ${{ runner.temp }}/gcp-key.json
+          echo "GCP_CREDENTIALS_FILE=${{ runner.temp }}/gcp-key.json" >> $GITHUB_ENV
       
       # Terraform Plan
       - name: Terraform Plan
@@ -94,6 +99,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
           AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GCP_CREDENTIALS_FILE }}
         working-directory: ${{ env.TF_WORKING_DIR }}
 
       # Terraform Apply (一括)
