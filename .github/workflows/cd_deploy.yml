@@ -1,91 +1,88 @@
-name: Continuous Deployment (CD) Pipeline with Terraform
+# name: Continuous Deployment (CD) Pipeline with Terraform
 
-on:
-  push:
-    branches:
-      - "main"
-  pull_request:
-    branches:
-      - "main"
+# on:
+#   push:
+#     branches:
+#       - "main"
 
-# 環境変数
-env:
-  # ECR/Lambda 設定
-  ECR_REPOSITORY: youtube-lambda-scraper-repository
-  LAMBDA_DOCKERFILE_PATH: ./Dockerfile.lambda
-  ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-  IMAGE_TAG: ${{ github.sha }}
+# # 環境変数
+# env:
+#   # ECR/Lambda 設定
+#   ECR_REPOSITORY: youtube-lambda-scraper-repository
+#   LAMBDA_DOCKERFILE_PATH: ./Dockerfile.lambda
+#   ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+#   IMAGE_TAG: ${{ github.sha }}
   
-  # Glue Job 設定
-  GLUE_SCRIPT_BUCKET: youtube-glue-job-script-1016
-  GLUE_SCRIPT_LOCAL_PATH: ./src/glue/app_glue.py
-  GLUE_SCRIPT_S3_PATH: jobs/youtube_processor.py
+#   # Glue Job 設定
+#   GLUE_SCRIPT_BUCKET: youtube-glue-job-script-1016
+#   GLUE_SCRIPT_LOCAL_PATH: ./src/glue/app_glue.py
+#   GLUE_SCRIPT_S3_PATH: jobs/youtube_processor.py
 
-  # Terraform 設定
-  TF_WORKING_DIR: ./terraform
-  TF_VERSION: 1.13.4
+#   # Terraform 設定
+#   TF_WORKING_DIR: ./terraform
+#   TF_VERSION: 1.13.4
 
-jobs:
-  cd:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+# jobs:
+#   cd:
+#     runs-on: ubuntu-latest
+#     if: github.ref == 'refs/heads/main'
     
-    # OIDC認証に必要な権限
-    permissions:
-      id-token: write 
-      contents: read
+#     # OIDC認証に必要な権限
+#     permissions:
+#       id-token: write 
+#       contents: read
     
-    steps:
-      - name: コードのチェックアウト
-        uses: actions/checkout@v4
+#     steps:
+#       - name: コードのチェックアウト
+#         uses: actions/checkout@v4
 
-      # --- AWS OIDC 認証
-      - name: AWS認証情報の構成 (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+#       # --- AWS OIDC 認証
+#       - name: AWS認証情報の構成 (OIDC)
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+#           aws-region: ${{ secrets.AWS_REGION }}
 
-      # --- ECR ログイン
-      - name:  ECRへログイン
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+#       # --- ECR ログイン
+#       - name:  ECRへログイン
+#         id: login-ecr
+#         uses: aws-actions/amazon-ecr-login@v2
         
-      # --- Lambda コンテナイメージのビルドとプッシュ
-      - name: Dockerイメージのビルドとタグ付け (ECR)
-        run: |          
-          docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ${{ env.LAMBDA_DOCKERFILE_PATH }} .
-          docker tag ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+#       # --- Lambda コンテナイメージのビルドとプッシュ
+#       - name: Dockerイメージのビルドとタグ付け (ECR)
+#         run: |          
+#           docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ${{ env.LAMBDA_DOCKERFILE_PATH }} .
+#           docker tag ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
-      - name: ECRへイメージをプッシュ
-        run: |
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+#       - name: ECRへイメージをプッシュ
+#         run: |
+#           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+#           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
-      # --- Terraformによるインフラ構築OK
-      - name: Terraformのセットアップ
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+#       # --- Terraformによるインフラ構築OK
+#       - name: Terraformのセットアップ
+#         uses: hashicorp/setup-terraform@v3
+#         with:
+#           terraform_version: ${{ env.TF_VERSION }}
           
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ${{ env.TF_WORKING_DIR }}
+#       - name: Terraform Init
+#         run: terraform init
+#         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform Validate
-        run: terraform validate
-        working-directory: ${{ env.TF_WORKING_DIR }}
+#       - name: Terraform Validate
+#         run: terraform validate
+#         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform Plan (変更の確認)
-        run: terraform plan
-        working-directory: ${{ env.TF_WORKING_DIR }}
+#       - name: Terraform Plan (変更の確認)
+#         run: terraform plan
+#         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform Apply (デプロイ実行)
-        run: terraform apply -auto-approve
-        working-directory: ${{ env.TF_WORKING_DIR }}
+#       - name: Terraform Apply (デプロイ実行)
+#         run: terraform apply -auto-approve
+#         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      # --- Glue JobスクリプトのS3へのアップロード
-      - name: Glue JobスクリプトをS3にアップロード
-        run: |
-          aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
-            --region ${{ secrets.AWS_REGION }}
+#       # --- Glue JobスクリプトのS3へのアップロード
+#       - name: Glue JobスクリプトをS3にアップロード
+#         run: |
+#           aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
+#             --region ${{ secrets.AWS_REGION }}
