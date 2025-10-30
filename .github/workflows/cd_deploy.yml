@@ -52,7 +52,7 @@ jobs:
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }} 
         run: |
-          aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} 2>/dev/null
+          aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }}
           if [ $? -ne 0 ]; then
             echo "Repository ${{ env.ECR_REPOSITORY }} not found. Creating it now..."
             aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }}
