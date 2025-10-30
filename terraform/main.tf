@@ -1,3 +1,9 @@
+/* 手動で設定するべき項目
+  ・Lambdaのコンテナイメージ(先に作っておく必要がある)
+  ・SecretManagerへのGoogle YouTube API Key
+  ・SecretMangerへのBigQueryのサービスアカウントキー
+  ・Glueのスクリプト
+
 /*
  * S3データレイクバケットの作成
  */
@@ -13,6 +19,31 @@ resource "aws_s3_bucket_public_access_block" "s3_data_lake_block" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+/*
+ * S3データレイク,ライフサイクルルール定義
+ */
+resource "aws_s3_bucket_lifecycle_configuration" "s3_data_lake_lifecycle" {
+  bucket = aws_s3_bucket.s3_data_lake_bucket.id
+
+  rule {
+    id     = "youtube_project_data_lifecycle"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    expiration {
+      days = 60 
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
 }
 
 /*
@@ -32,8 +63,6 @@ resource "aws_ecr_repository" "lambda_ecr_repository" {
 /*
  * Secret managerの定義(API Keyは手動で設定)
  */
-data "aws_caller_identity" "current" {}
-
 # Secrets Managerの枠組みとポリシーを作成
 module "youtube_secret" {
   source = "terraform-aws-modules/secrets-manager/aws"
@@ -43,131 +72,49 @@ module "youtube_secret" {
   description             = "YouTube Data API Key for data scraper"
   recovery_window_in_days = 14
   create_random_password = false 
-  secret_string = jsonencode({
-    API_KEY = "PLACEHOLDER" # 後で手動で入れる
-  })
+  secret_string = var.youtube_api_key
   create_policy = false
-}
-
-/*
- * Lambdaのassume role作成
- */
-resource "aws_iam_role" "lambda_execution_role" {
-  name = "youtube-pipeline-lambda-role"
-  
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Action = "sts:AssumeRole",
-        Effect = "Allow",
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = var.project_tags
-}
-
-/*
- * Lambdaのポリシー設定
- */
-resource "aws_iam_policy" "lambda_combined_execution_policy" {
-  name        = "youtube-pipeline-lambda-combined-policy"
-  description = "YouTube API実行Lambdaに必要な全ての権限（Logs, S3, Secrets）"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      # LambdaのCloudWatch Logsへの書き込み権限
-      {
-        Sid      = "CloudWatchLogsAccess",
-        Effect   = "Allow",
-        Action   = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ],
-        Resource = "arn:aws:logs:*:*:*"
-      },
-
-      # LambdaのS3データレイクへのアクセス権限
-      {
-        Sid      = "S3DataLakeAccess",
-        Effect   = "Allow",
-        Action   = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:ListBucket"
-        ],
-        Resource = [
-          aws_s3_bucket.s3_data_lake_bucket.arn,
-          "${aws_s3_bucket.s3_data_lake_bucket.arn}/*"
-        ]
-      },
-
-      # LambdaのSecret Managerへの読み取り権限
-      {
-        Sid      = "SecretsManagerRead",
-        Effect   = "Allow",
-        Action   = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
-        ],
-        Resource = module.youtube_secret.secret_arn
-      },
-
-      # LambdaのEventBridgeへの引継ぎ権限
-      {
-        Sid      = "EventBridgePutEvents",
-        Effect   = "Allow",
-        Action   = "events:PutEvents",
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-/*
- * Lambdaのポリシーをロールへアタッチ
- */
-resource "aws_iam_role_policy_attachment" "lambda_combined_attach" {
-  role       = aws_iam_role.lambda_execution_role.name
-  policy_arn = aws_iam_policy.lambda_combined_execution_policy.arn 
 }
 
 /*
  * Lambdaの定義
  */
-resource "aws_lambda_function" "youtube_lambda_scraper" {
-  function_name = "youtube-data-scraper"
-  description   = "Scrape youtube data with Google API."
-  package_type = "Image"
+module "youtube_scraper_channel" {
+  source = "./modules/lambda"
+
+  function_name          = "youtube-lambda-scraper"
+  ecr_repository_url     = aws_ecr_repository.lambda_ecr_repository.repository_url
+  s3_data_lake_bucket_name = aws_s3_bucket.s3_data_lake_bucket.id
+  youtube_secret_arn     = module.youtube_secret.secret_arn
+  region_name            = var.region_name
+  project_tags           = var.project_tags
+}
+
+/*
+ * Lambda自体のアラーム
+ */
+module "lambda_function_failure_alarm" {
+  source              = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+  version             = "5.7.2"
+
+  alarm_name          = "lambda-function-failed-alarm"
+  alarm_description   = "Lambda関数が実行時エラー（タイムアウト、認証失敗など）を返した場合に発報"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  period              = 600
+  statistic           = "Sum"
   
-  # dockerイメージのタグはlatestを指定
-  image_uri    = "${aws_ecr_repository.lambda_ecr_repository.repository_url}:latest"  
-  role         = aws_iam_role.lambda_execution_role.arn
-  
-  image_config {
-    command = ["app_lambda.lambda_handler"]
+  metric_name = "Errors"
+  namespace   = "AWS/Lambda"
+
+  dimensions = { 
+    FunctionName = module.youtube_scraper_channel.lambda_name
   }
 
-  environment {
-    variables = {
-      BUCKET_NAME = var.data_bucket_name
-      REGION_NAME = var.region_name
-      YOUTUBE_API_KEY_ARN = module.youtube_secret.secret_arn
-    }
-  }
+  treat_missing_data = "notBreaching"
 
-  timeout      = 300 
-  memory_size  = 256
-  
-  depends_on = [
-    aws_ecr_repository.lambda_ecr_repository,
-  ]
+  alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
 }
 
 /*
@@ -186,13 +133,46 @@ resource "aws_iam_role" "sfn_glue_execution_role" {
   })
 }
 
+# SFNのポリシー（別途で記述）
+resource "aws_iam_policy" "startcrawler_cloudwatch_policy" {
+  name        = "AllowStartCrawlerCloudWatch"
+  description = "Allow Step Function to start Glue crawler"
+  policy      = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "glue:StartCrawler"
+        ],
+        Resource = "arn:aws:glue:ap-northeast-1:879363564916:crawler/youtube_processed_data_crawler"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        Resource = "arn:aws:logs:ap-northeast-1:879363564916:log-group:/prd/data-pipeline/sfn-executions:*" 
+      }
+    ]
+  })
+}
+
+# SFNがCrawlerをスタートするポリシーをモジュールにアタッチ
+resource "aws_iam_role_policy_attachment" "attach_glue_startcrawler" {
+  role       = module.step-function.role_name
+  policy_arn = aws_iam_policy.startcrawler_cloudwatch_policy.arn
+}
+
+# SFNの定義
 module "step-function" {
   source  = "terraform-aws-modules/step-functions/aws"
   version = "5.0.1"
 
   name       = "youtube-glue-workflow"
   type = "STANDARD"
-  # 後で変更
+
   definition = <<EOF
 {
   "Comment": "A description of my state machine",
@@ -203,14 +183,14 @@ module "step-function" {
     "Pass": {
       "Type": "Pass",
       "Parameters": {
-        "decoded_payload.$": "States.StringToJson($.input)"
+        "decoded_payload.$": "$.lambda_output"
       },
-      "ResultPath": "$.decoded_payload",
-      "Next": "Glue StartJobRun"
+      "ResultPath": "$",
+      "Next": "RunGlueJobAndWait"
     },
-    "Glue StartJobRun": {
+    "RunGlueJobAndWait": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::glue:startJobRun",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
       "Parameters": {
         "JobName": "${aws_glue_job.youtube_data_processing_job.name}",
         "Arguments": {
@@ -224,6 +204,16 @@ module "step-function" {
         }
       },
       "ResultPath": "$.glue_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": [
@@ -242,7 +232,17 @@ module "step-function" {
       },
       "ResultPath": "$.crawler_result",
       "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
-      "Next": "Success",
+      "Next": "NotifySuccess",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": [
@@ -252,6 +252,21 @@ module "step-function" {
           "Comment": "Crawler Failure"
         }
       ]
+    },
+    "NotifySuccess": { 
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${aws_sns_topic.alert_topic_sfn.arn}", 
+        "Message.$": "States.Format('ETL Pipeline SUCCESS ID: {}', $.decoded_payload.correlation_id)",
+        "MessageAttributes": {
+          "Status": {
+            "DataType": "String",
+            "StringValue": "SUCCESS"
+          }
+        }
+      },
+      "Next": "Success"
     },
     "NotifyFailure": {
       "Type": "Task",
@@ -274,13 +289,52 @@ module "step-function" {
   }
 }
 EOF
+  cloudwatch_log_group_name = "/aws/sfn/youtube-pipeline-executions"
+  cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
+
   service_integrations = {
     glue_Sync = {
       glue = [aws_glue_job.youtube_data_processing_job.arn]
     }
+    sns = {
+      sns = [aws_sns_topic.alert_topic_sfn.arn]
+    }
+  }
+
+  logging_configuration = {
+    include_execution_data = true 
+    level                  = "ALL"
   }
 
   tags = var.project_tags
+}
+
+/*
+ * SFN自体のアラーム
+ */
+# SFNの実行失敗を検知するアラーム
+module "sfn_execution_failure_alarm" {
+  source              = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+  version             = "5.7.2"
+
+  alarm_name          = "sfn-execution-failed-alarm"
+  alarm_description   = "SFNワークフローの実行が失敗しました。Catchブロックで処理されないシステムエラーなどを検知。"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  period              = 600
+  statistic           = "Sum"
+  
+  metric_name = "ExecutionsFailed"
+  namespace   = "AWS/States"
+
+  dimensions = { 
+    StateMachineName = module.step-function.state_machine_name
+  }
+
+  treat_missing_data = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
 }
 
 /*
@@ -292,15 +346,12 @@ locals {
     input_paths = {
       lambda_output = "$.detail"
     }
-    input_template = "<lambda_output>"
+    input_template = <<EOT
+      {
+        "lambda_output": <lambda_output>
+      }
+    EOT
   }
-}
-
-##### test #####
-# debug用ロググループの作成
-resource "aws_cloudwatch_log_group" "eventbridge_debug" {
-  name              = "/aws/events/youtube-pipeline-event-bus-debug-log"
-  retention_in_days = 7
 }
 
 /*
@@ -315,14 +366,14 @@ module "eventbridge" {
   # スケジュールベースの Lambda 実行設定 (最初のブロックの内容)
   # Lambdaへの実行権限をモジュールに自動で設定させる
   attach_lambda_policy = true 
-  lambda_target_arns   = [aws_lambda_function.youtube_lambda_scraper.arn]
+  lambda_target_arns   = [module.youtube_scraper_channel.lambda_arn]
 
   schedules = {
     sukima_schedule = {
       description         = "Lambda trigger schedule for Channel Sukima-Switch"
       schedule_expression = "cron(0 6 ? * FRI *)"
       timezone            = "Asia/Tokyo"
-      arn                 = aws_lambda_function.youtube_lambda_scraper.arn 
+      arn                 = module.youtube_scraper_channel.lambda_arn 
       input = jsonencode({
         ARTIST_NAME_SLUG = "sukima-switch",
         ARTIST_NAME_DISPLAY = "スキマスイッチ",
@@ -330,12 +381,26 @@ module "eventbridge" {
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_sukima-switch"
       })
+      retry_policy = {
+        maximum_retry_attempts = 2
+        maximum_event_age_in_seconds = 300
+      }
+      log_config = {
+        include_detail = "FULL"
+        level          = "ERROR"
+      }
+      log_delivery = {
+        cloudwatch_logs = {
+          destination_arn = aws_cloudwatch_log_group.scheduler_logs.arn
+        }
+      }
     }
+
     ikimono_schedule = {
       description         = "Lambda trigger schedule for Channel Ikimono-Gakari"
       schedule_expression = "cron(0 6 ? * MON *)"
       timezone            = "Asia/Tokyo"
-      arn                 = aws_lambda_function.youtube_lambda_scraper.arn 
+      arn                 = module.youtube_scraper_channel.lambda_arn 
       input = jsonencode({
         ARTIST_NAME_SLUG = "ikimonogakari",
         ARTIST_NAME_DISPLAY = "いきものがかり",
@@ -343,6 +408,19 @@ module "eventbridge" {
         POWERTOOLS_LOG_LEVEL    = "INFO",
         POWERTOOLS_SERVICE_NAME = "youtube_logger_tools_ikimono-gakari"
       })
+      retry_policy = {
+        maximum_retry_attempts = 2
+        maximum_event_age_in_seconds = 300
+      }
+      log_config = {
+        include_detail = "FULL"
+        level          = "ERROR"
+      }
+      log_delivery = {
+        cloudwatch_logs = {
+          destination_arn = aws_cloudwatch_log_group.scheduler_logs.arn
+        }
+      }
     }
   }
 
@@ -362,17 +440,53 @@ module "eventbridge" {
   }
 
   targets = {
-    scraper_completed_event = [ # ルール名とキー名を一致させる
+    scraper_completed_event = [
       {
         name              = "start-sfn-workflow"
         arn               = module.step-function.state_machine_arn # SFNのARNを参照
         attach_role_arn = true
         input_transformer = local.sfn_input_transformer
+        dead_letter_arn = module.youtube_event_dlq.queue_arn
+        retry_policy = {
+            maximum_retry_attempts = 2
+            maximum_event_age_in_seconds = 600
+        }
       }
     ]
   }
 
   tags = var.project_tags
+}
+
+/*
+ * スケジューラー自体に対するアラームの設定
+ */
+module "scheduler_failure_alarm" {
+  source              = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+  version             = "5.7.2"
+
+  alarm_name          = "scheduler-failed-alert"
+  alarm_description   = "EventBridge SchedulerがLambdaの呼び出しに失敗し、パイプラインが起動できませんでした。"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  period              = 600
+  statistic           = "Sum"
+  
+  metric_name = "FailedInvocations"
+  namespace   = "AWS/Scheduler"
+
+  treat_missing_data = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
+}
+
+/*
+ * スケジューラーのロググループの設定
+ */
+resource "aws_cloudwatch_log_group" "scheduler_logs" {
+  name              = "/aws/events/scheduler/youtube-pipeline-schedules"
+  retention_in_days = var.cloudwatch_log_group_retention_in_days
 }
 
 /*
@@ -404,19 +518,7 @@ module "bigquery_secret" {
   description             = "BigQuery service account key for project-youtube"
   recovery_window_in_days = 14
   create_random_password = false 
-  secret_string = jsonencode({
-    "type": "PLACEHOLDER",
-    "project_id": "PLACEHOLDER",
-    "private_key_id": "PLACEHOLDER",
-    "private_key": "PLACEHOLDER",
-    "client_email": "PLACEHOLDER",
-    "client_id": "PLACEHOLDER",
-    "auth_uri": "PLACEHOLDER",
-    "token_uri": "PLACEHOLDER",
-    "auth_provider_x509_cert_url": "PLACEHOLDER",
-    "client_x509_cert_url": "PLACEHOLDER",
-    "universe_domain": "PLACEHOLDER"
-  })
+  secret_string = var.bigquery_sa_key_json
   create_policy = false #　後で作る
 }
 
@@ -532,13 +634,19 @@ resource "aws_iam_role_policy_attachment" "glue_combined_attach" {
   policy_arn = aws_iam_policy.glue_combined_policy.arn
 }
 
+# Glueのロググループの作成
+resource "aws_cloudwatch_log_group" "glue_etl_logs" {
+  name              = "/aws-glue/jobs/youtube-data-processing-job"
+  retention_in_days = var.cloudwatch_log_group_retention_in_days
+}
+
 # Glueジョブの定義
 resource "aws_glue_job" "youtube_data_processing_job" {
   name             = "youtube-data-processing-job"
   description      = "Processes YouTube raw data and loads to the Data Catalog using BigQuery Connection."
   role_arn         = aws_iam_role.glue_job_execution_role.arn 
   glue_version     = "5.0"
-  max_retries      = 0
+  max_retries      = 2
   timeout          = 20
   number_of_workers = 2
   worker_type      = "G.1X"
@@ -555,14 +663,13 @@ resource "aws_glue_job" "youtube_data_processing_job" {
   # Spark UI LogsとTemporary Pathの設定を追加
   default_arguments = {
     "--TempDir"                 = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/tmp/"
-    "--spark-ui-log-path"       = "s3://${aws_s3_bucket.s3_glue_script_bucket.id}/logs/spark-ui/"
+    "--spark-event-logs-path"   = "s3://${aws_s3_bucket.s3_data_lake_bucket.id}/logs/spark-ui/"
     "--enable-spark-ui"         = "true"
-    
     "--job-language"            = "python"
-    "--continuous-log-logGroup" = "/aws-glue/jobs"
     "--enable-continuous-cloudwatch-log" = "true"
+    "--continuous-log-logGroup" = aws_cloudwatch_log_group.glue_etl_logs.name
     "--enable-continuous-log-filter"     = "true"
-    "--enable-metrics"          = "true"
+    "--enable-metrics"          = ""
     "--enable-auto-scaling"     = "true"
     "--gcp_project_id" = "project-youtube-472803"
     "--bq_dataset" = "youtube_project_processed_data"
@@ -596,7 +703,7 @@ resource "aws_sns_topic" "alert_topic_sfn" {
 
 # Eメールサブスクリプションの定義
 resource "aws_sns_topic_subscription" "alert_email_subscription" {
-  topic_arn = aws_sns_topic.alert_topic_sfn.arn 
+  topic_arn = aws_sns_topic.alert_topic_sfn.arn
   protocol  = "email"
   endpoint  = var.alert_email_endpoint 
 }
@@ -611,6 +718,7 @@ resource "google_bigquery_dataset" "bq_data_set" {
   description                 = "AWS Glueからの加工データを受け取るためのデータセット"
   location                    = var.gcp_region
   project = var.gcp_project_id
+  delete_contents_on_destroy = true # 注意：破壊用に一時的に設定
 }
 
 # BQスキーマの定義
@@ -666,7 +774,7 @@ resource "google_bigquery_table" "bq_data_table" {
 
   for_each = local.table_schema_map
   table_id   = each.key
-  deletion_protection = true
+  deletion_protection = false # 注意：destroy用に設定にしているので後で変更
   time_partitioning {
     type = "DAY"
   }
@@ -674,3 +782,57 @@ resource "google_bigquery_table" "bq_data_table" {
   schema     = jsonencode(each.value)
 }
  
+/*
+ * EventBridgeのエラーを受け取るSQSの定義
+ */
+module "youtube_event_dlq" {
+  source  = "terraform-aws-modules/sqs/aws"
+  version = "5.1.0"
+
+  name = "youtube_event_dlq"
+  create_queue_policy = true
+
+  queue_policy_statements = {
+    eventbridge_send = {
+      sid     = "AllowEventBridgeToSendMessages"
+      actions = ["sqs:SendMessage"]
+
+      principals = [
+        {
+          type        = "Service"
+          identifiers = ["events.amazonaws.com"]
+        }
+      ]
+
+      condition = [{
+        test     = "ForAllValues:ArnEquals" 
+        variable = "aws:SourceArn"
+        values   = [module.eventbridge.eventbridge_rule_arns.scraper_completed_event]
+      }]
+    }
+  }
+}
+
+/*
+ * SQSを受け取るCloudWatchアラームの定義
+ */
+module "dlq_event_alarm" {
+  source  = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
+  version = "5.7.2"
+
+  alarm_name          = "dlq-eventbridge-Alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  period              = 600
+  statistic           = "Sum"
+  
+  metric_name = "ApproximateNumberOfMessagesVisible"
+  namespace   = "AWS/SQS"
+  
+  dimensions = { 
+    QueueName = module.youtube_event_dlq.queue_name
+  }
+
+  alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
+}
