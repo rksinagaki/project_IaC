@@ -35,7 +35,7 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
           
-      - name:  Terraform Validate
+      - name: Terraform Validate
         run: terraform validate
         working-directory: ${{ env.TF_WORKING_DIR }}
 
