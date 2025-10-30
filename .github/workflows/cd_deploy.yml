@@ -48,18 +48,11 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       # ECRリポジトリの事前作成
-      - name: ECRリポジトリの初回作成 (冪等性)
+      - name: ECRリポジトリの初回作成
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }} 
         run: |
-          aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }}          
-          if [ $? -ne 0 ]; then
-            echo "Repository ${{ env.ECR_REPOSITORY }} not found. Attempting to create it..."
-            aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }}
-            echo "Repository created or already exists."
-          else
-            echo "Repository ${{ env.ECR_REPOSITORY }} already exists."
-          fi
+          aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} || true
 
       # Lambda コンテナイメージのビルド
       - name: Dockerイメージのビルドとタグ付け (ECR)
