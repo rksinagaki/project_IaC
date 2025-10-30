@@ -37,6 +37,7 @@ jobs:
 
       # --- AWS OIDC 認証
       - name: AWS認証情報の構成 (OIDC)
+        id: assume-role
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
@@ -77,10 +78,8 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          # Secretsを -var オプションで渡し、Terraform変数に値を注入
-          terraform plan -no-color \
           -var="youtube_api_key=${{ secrets.YOUTUBE_API_KEY }}" \
-          -var="gcp_sa_key_json=${{ secrets.GCP_SA_KEY_JSON }}" \
+          -var="bigquery_sa_key_json=${{ secrets.GCP_SA_KEY_JSON }}" \
           -out=tfplan
         env:
           AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
