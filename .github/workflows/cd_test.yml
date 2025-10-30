@@ -17,7 +17,7 @@
 #       - name: コードのチェックアウト (必須ではないが慣例として含める)
 #         uses: actions/checkout@v4
 
-#       # --- 認証テストの核心 ---
+#       # --- 認証テストの核心
 #       - name: AWS認証情報の構成 (OIDC)を試行
 #         uses: aws-actions/configure-aws-credentials@v4
 #         with:
