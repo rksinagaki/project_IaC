@@ -773,7 +773,7 @@ resource "google_bigquery_table" "bq_data_table" {
 
   for_each = local.table_schema_map
   table_id   = each.key
-  deletion_protection = true
+  deletion_protection = false # 注意：destroy用に設定にしているので後で変更
   time_partitioning {
     type = "DAY"
   }
