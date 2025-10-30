@@ -1,5 +1,4 @@
 name: Continuous Deployment (CD) Pipeline with Terraform
-
 on:
   push:
     branches:
@@ -60,12 +59,6 @@ jobs:
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
-      # --- Glue JobスクリプトのS3へのアップロード
-      - name: Glue JobスクリプトをS3にアップロード
-        run: |
-          aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
-            --region ${{ secrets.AWS_REGION }}
-
       # --- Terraformによるインフラ構築OK
       - name: Terraformのセットアップ
         uses: hashicorp/setup-terraform@v3
@@ -87,3 +80,9 @@ jobs:
       - name: Terraform Apply (デプロイ実行)
         run: terraform apply -auto-approve
         working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # --- Glue JobスクリプトのS3へのアップロード
+      - name: Glue JobスクリプトをS3にアップロード
+        run: |
+          aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
+            --region ${{ secrets.AWS_REGION }}
