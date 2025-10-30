@@ -2,7 +2,7 @@
 # on:
 #   push:
 #     branches:
-#       - feature/DQ
+#       - 'main'
 #   workflow_dispatch:
 
 # jobs:
