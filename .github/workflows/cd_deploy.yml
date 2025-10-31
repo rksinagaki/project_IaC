@@ -124,3 +124,8 @@ jobs:
         run: |
           aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
             --region ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Destroy (自動クリーンアップ)
+        if: always()
+        run: terraform destroy -auto-approve
+        working-directory: ${{ env.TF_WORKING_DIR }}
