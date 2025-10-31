@@ -5,6 +5,9 @@ on:
     branches:
       - "main"
 
+  workflow_dispatch:
+
+
 # 環境変数
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -129,16 +132,60 @@ jobs:
             --region ${{ secrets.AWS_REGION }}
 
       # Destroy用認証
+      # - name: AWS認証情報の構成 (OIDC)
+      #   id: assume-role-for-destroy
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+      #     aws-region: ${{ secrets.AWS_REGION }}
+
+      # Terraform Destroy
+      # - name: Terraform Destroy (自動クリーンアップ)
+      #   if: always()
+      #   run: |
+      #     terraform destroy -auto-approve \
+      #       -var="youtube_api_key=${{ secrets.YOUTUBE_API_KEY }}" \
+      #       -var='bigquery_sa_key_json=${{ secrets.BIGQUERY_SA_KEY_JSON }}' \
+      #       -var="alert_email_endpoint=${{ secrets.ALERT_EMAIL_ENDPOINT }}" \
+      #       -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" \
+      #       -var="gcp_region=${{ secrets.GCP_REGION }}"
+      #   working-directory: ${{ env.TF_WORKING_DIR }}
+
+  manual-destroy:
+    runs-on: ubuntu-latest
+    needs: [cd]
+    if: github.event_name == 'workflow_dispatch'
+    environment: production
+    
+    permissions:
+      id-token: write 
+      contents: read
+    
+    steps:
+      # コードのチェックアウト
+      - name: コードのチェックアウト
+        uses: actions/checkout@v4
+
+      # 認証情報の構成 (Destroy用)
       - name: AWS認証情報の構成 (OIDC)
-        id: assume-role-for-destroy
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # Terraformのセットアップ
+      - name: Terraform のセットアップ
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          
+      # Terraform initの実行 (S3へ接続)
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
       # Terraform Destroy
-      - name: Terraform Destroy (自動クリーンアップ)
-        if: always()
+      - name: Terraform Destroy
         run: |
           terraform destroy -auto-approve \
             -var="youtube_api_key=${{ secrets.YOUTUBE_API_KEY }}" \
