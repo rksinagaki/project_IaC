@@ -79,7 +79,7 @@ jobs:
 
       - name: GCPサービスアカウントキーのセットアップ
         run: |
-          echo "${{ secrets.BIGQUERY_SA_KEY_JSON }}" | base64 -d > ${{ runner.temp }}/gcp-key.json
+          echo "${{ secrets.BIGQUERY_SA_KEY_JSON }}" > ${{ runner.temp }}/gcp-key.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=${{ runner.temp }}/gcp-key.json" >> $GITHUB_ENV
           
       # ここから(ネットの記事を参考に実装する。TerraformがAWSとGCPの権限を受け取れていない。)
