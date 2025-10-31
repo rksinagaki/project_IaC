@@ -114,7 +114,7 @@ jobs:
         run: terraform apply tfplan
         working-directory: ${{ env.TF_WORKING_DIR }}
         
-      # Glue JobスクリプトのS3へのアップロード
+      # Glue JobスクリプトをS3へのアップロード
       - name: Glue JobスクリプトをS3にアップロード
         run: |
           aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
