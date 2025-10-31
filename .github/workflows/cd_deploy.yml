@@ -114,6 +114,13 @@ jobs:
           echo "⚠️ GCPキーの内容の確認（最初の200文字）:"
           head -c 200 $GOOGLE_APPLICATION_CREDENTIALS
           echo "..."
+
+      - name: AWS認証情報の構成 (OIDC)
+        id: assume-role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
       
       # Terraform Plan
       - name: Terraform Plan
