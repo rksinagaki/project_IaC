@@ -82,7 +82,7 @@ jobs:
           echo "${{ secrets.BIGQUERY_SA_KEY_JSON }}" > ${{ runner.temp }}/gcp-key.json
           echo "GCP_CREDENTIALS_FILE=${{ runner.temp }}/gcp-key.json" >> $GITHUB_ENV
           
-      # ここから(ネットの記事を参考に実装、TerraformがAWSとGCPの権限を受け取れていない。)
+      # ここから(ネットの記事を参考に実装する。TerraformがAWSとGCPの権限を受け取れていない。)
       - name: Terraform Init
         run: terraform init
         env:
