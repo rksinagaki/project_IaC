@@ -114,18 +114,13 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
 
       # Terraform Apply (一括)
-      # - name: Terraform Apply
-      #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-      #   run: terraform apply tfplan
-      #   env:
-      #     AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
-      #     AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
-      #     AWS_SESSION_TOKEN: ${{ env.AWS_SESSION_TOKEN }}
-      #     GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
-      #   working-directory: ${{ env.TF_WORKING_DIR }}
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply tfplan
+        working-directory: ${{ env.TF_WORKING_DIR }}
         
-      # # Glue JobスクリプトのS3へのアップロード
-      # - name: Glue JobスクリプトをS3にアップロード
-      #   run: |
-      #     aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
-      #       --region ${{ secrets.AWS_REGION }}
+      # Glue JobスクリプトのS3へのアップロード
+      - name: Glue JobスクリプトをS3にアップロード
+        run: |
+          aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
+            --region ${{ secrets.AWS_REGION }}
