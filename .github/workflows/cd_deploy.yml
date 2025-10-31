@@ -147,6 +147,12 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
+
+      # GCPのセットアップ
+      - name: GCPサービスアカウントキーのセットアップ
+        run: |
+          printf '%s' '${{ secrets.BIGQUERY_SA_KEY_JSON }}' > ${{ runner.temp }}/gcp-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${{ runner.temp }}/gcp-key.json" >> $GITHUB_ENV
           
       # Terraform initの実行 (S3へ接続)
       - name: Terraform Init
