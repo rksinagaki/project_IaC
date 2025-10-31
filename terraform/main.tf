@@ -49,15 +49,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "s3_data_lake_lifecycle" {
 /*
  * awsリポジトリ(ECR)の定義
  */
-resource "aws_ecr_repository" "lambda_ecr_repository" {
+# resource "aws_ecr_repository" "lambda_ecr_repository" {
+#   name                 = "youtube-lambda-scraper-repository"
+#   image_tag_mutability = "MUTABLE"
+
+#   image_scanning_configuration {
+#     scan_on_push = true
+#   }
+
+#   force_delete = true
+# }
+
+data "aws_ecr_repository" "lambda_ecr_repository" {
   name                 = "youtube-lambda-scraper-repository"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  force_delete = true
 }
 
 /*
@@ -519,7 +523,7 @@ module "bigquery_secret" {
   recovery_window_in_days = 14
   create_random_password = false 
   secret_string = var.bigquery_sa_key_json
-  create_policy = false #　後で作る
+  create_policy = false
 }
 
 # Glue Connectionを定義

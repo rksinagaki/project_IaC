@@ -106,7 +106,7 @@ jobs:
         run: |
           terraform plan \
             -var="youtube_api_key=${{ secrets.YOUTUBE_API_KEY }}" \
-            -var="bigquery_sa_key_json=${{ secrets.GCP_SA_KEY_JSON }}" \
+            -var='bigquery_sa_key_json=${{ secrets.BIGQUERY_SA_KEY_JSON }}' \
             -var="alert_email_endpoint=${{ secrets.ALERT_EMAIL_ENDPOINT }}" \
             -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="gcp_region=${{ secrets.GCP_REGION }}" \
