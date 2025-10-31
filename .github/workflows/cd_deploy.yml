@@ -44,12 +44,6 @@ jobs:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: AWSクレデンシャルの環境変数登録
-        run: |
-          echo "AWS_ACCESS_KEY_ID=${{ steps.assume-role.outputs.access_key_id }}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${{ steps.assume-role.outputs.secret_access_key }}" >> $GITHUB_ENV
-          echo "AWS_SESSION_TOKEN=${{ steps.assume-role.outputs.session_token }}" >> $GITHUB_ENV
-
       # ECR ログイン
       - name: ECRへログイン
         id: login-ecr
@@ -58,6 +52,12 @@ jobs:
           aws-access-key-id: ${{ steps.assume-role.outputs.access_key_id }}
           aws-secret-access-key: ${{ steps.assume-role.outputs.secret_access_key }}
           aws-session-token: ${{ steps.assume-role.outputs.session_token }}
+
+      - name: Terraform向けAWS認証情報の再登録
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ steps.assume-role.outputs.access_key_id }}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{ steps.assume-role.outputs.secret_access_key }}" >> $GITHUB_ENV
+          echo "AWS_SESSION_TOKEN=${{ steps.assume-role.outputs.session_token }}" >> $GITHUB_ENV
 
       # ECRリポジトリの事前作成
       - name: ECRリポジトリの初回作成
