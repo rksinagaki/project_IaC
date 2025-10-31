@@ -92,7 +92,7 @@ jobs:
           
       # Terraform initの実行
       - name: Terraform Init
-        run: terraform init
+        run: terraform init -reconfigure
         working-directory: ${{ env.TF_WORKING_DIR }}
 
       # plan用認証
