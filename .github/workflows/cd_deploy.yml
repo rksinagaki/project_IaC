@@ -53,12 +53,6 @@ jobs:
           aws-secret-access-key: ${{ steps.assume-role.outputs.secret_access_key }}
           aws-session-token: ${{ steps.assume-role.outputs.session_token }}
 
-      - name: Terraform向けAWS認証情報の再登録
-        run: |
-          echo "AWS_ACCESS_KEY_ID=${{ steps.assume-role.outputs.access_key_id }}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${{ steps.assume-role.outputs.secret_access_key }}" >> $GITHUB_ENV
-          echo "AWS_SESSION_TOKEN=${{ steps.assume-role.outputs.session_token }}" >> $GITHUB_ENV
-
       # ECRリポジトリの事前作成
       - name: ECRリポジトリの初回作成
         env:
@@ -82,24 +76,21 @@ jobs:
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
+      # Terraformのセットアップ
       - name: Terraform のセットアップ
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      # GCPのセットアップ
       - name: GCPサービスアカウントキーのセットアップ
         run: |
-          echo "${{ secrets.BIGQUERY_SA_KEY_JSON }}" > ${{ runner.temp }}/gcp-key.json
+          printf '%s' '${{ secrets.BIGQUERY_SA_KEY_JSON }}' > ${{ runner.temp }}/gcp-key.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=${{ runner.temp }}/gcp-key.json" >> $GITHUB_ENV
           
-      # ここから(ネットの記事を参考に実装する。TerraformがAWSとGCPの権限を受け取れていない。)
+      # Terraform initの実行
       - name: Terraform Init
         run: terraform init
-        env:
-          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ env.AWS_SESSION_TOKEN }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         working-directory: ${{ env.TF_WORKING_DIR }}
 
       - name: AWS認証情報の構成 (OIDC)
@@ -120,26 +111,21 @@ jobs:
             -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="gcp_region=${{ secrets.GCP_REGION }}" \
             -out=tfplan
-        env:
-          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ env.AWS_SESSION_TOKEN }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         working-directory: ${{ env.TF_WORKING_DIR }}
 
       # Terraform Apply (一括)
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply tfplan
-        env:
-          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ env.AWS_SESSION_TOKEN }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
-        working-directory: ${{ env.TF_WORKING_DIR }}
+      # - name: Terraform Apply
+      #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      #   run: terraform apply tfplan
+      #   env:
+      #     AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+      #     AWS_SESSION_TOKEN: ${{ env.AWS_SESSION_TOKEN }}
+      #     GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+      #   working-directory: ${{ env.TF_WORKING_DIR }}
         
-      # Glue JobスクリプトのS3へのアップロード
-      - name: Glue JobスクリプトをS3にアップロード
-        run: |
-          aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
-            --region ${{ secrets.AWS_REGION }}
+      # # Glue JobスクリプトのS3へのアップロード
+      # - name: Glue JobスクリプトをS3にアップロード
+      #   run: |
+      #     aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
+      #       --region ${{ secrets.AWS_REGION }}
