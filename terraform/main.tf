@@ -49,15 +49,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "s3_data_lake_lifecycle" {
 /*
  * awsリポジトリ(ECR)の定義
  */
-resource "aws_ecr_repository" "lambda_ecr_repository" {
+# resource "aws_ecr_repository" "lambda_ecr_repository" {
+#   name                 = "youtube-lambda-scraper-repository"
+#   image_tag_mutability = "MUTABLE"
+
+#   image_scanning_configuration {
+#     scan_on_push = true
+#   }
+
+#   force_delete = true
+# }
+
+data "aws_ecr_repository" "lambda_ecr_repository" {
   name                 = "youtube-lambda-scraper-repository"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  force_delete = true
 }
 
 /*
@@ -83,7 +87,7 @@ module "youtube_scraper_channel" {
   source = "./modules/lambda"
 
   function_name          = "youtube-lambda-scraper"
-  ecr_repository_url     = aws_ecr_repository.lambda_ecr_repository.repository_url
+  ecr_repository_url     = data.aws_ecr_repository.lambda_ecr_repository.repository_url
   s3_data_lake_bucket_name = aws_s3_bucket.s3_data_lake_bucket.id
   youtube_secret_arn     = module.youtube_secret.secret_arn
   region_name            = var.region_name
@@ -519,7 +523,7 @@ module "bigquery_secret" {
   recovery_window_in_days = 14
   create_random_password = false 
   secret_string = var.bigquery_sa_key_json
-  create_policy = false #　後で作る
+  create_policy = false
 }
 
 # Glue Connectionを定義
@@ -718,6 +722,7 @@ resource "google_bigquery_dataset" "bq_data_set" {
   description                 = "AWS Glueからの加工データを受け取るためのデータセット"
   location                    = var.gcp_region
   project = var.gcp_project_id
+  delete_contents_on_destroy = true # 注意：破壊用に一時的に設定
 }
 
 # BQスキーマの定義
@@ -773,7 +778,7 @@ resource "google_bigquery_table" "bq_data_table" {
 
   for_each = local.table_schema_map
   table_id   = each.key
-  deletion_protection = true
+  deletion_protection = false # 注意：destroy用に設定にしているので後で変更
   time_partitioning {
     type = "DAY"
   }

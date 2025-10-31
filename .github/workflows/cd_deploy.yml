@@ -7,6 +7,8 @@ on:
 
 # 環境変数
 env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # ECR/Lambda 設定
   ECR_REPOSITORY: youtube-lambda-scraper-repository
   LAMBDA_DOCKERFILE_PATH: ./Dockerfile.lambda
@@ -23,10 +25,11 @@ env:
 
 jobs:
   cd:
+    timeout-minutes: 10
+
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     
-    # OIDC認証に必要な権限
     permissions:
       id-token: write 
       contents: read
@@ -35,7 +38,7 @@ jobs:
       - name: コードのチェックアウト
         uses: actions/checkout@v4
 
-      # --- AWS OIDC 認証
+      # AWS OIDC 認証
       - name: AWS認証情報の構成 (OIDC)
         id: assume-role
         uses: aws-actions/configure-aws-credentials@v4
@@ -43,61 +46,104 @@ jobs:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # --- ECR ログイン
-      - name:  ECRへログイン
+      # ECR ログイン
+      - name: ECRへログイン
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-        
-      # --- Lambda コンテナイメージのビルドとプッシュ
+        # with:
+        #   aws-access-key-id: ${{ steps.assume-role.outputs.access_key_id }}
+        #   aws-secret-access-key: ${{ steps.assume-role.outputs.secret_access_key }}
+        #   aws-session-token: ${{ steps.assume-role.outputs.session_token }}
+
+      # ECRリポジトリの事前作成
+      - name: ECRリポジトリの初回作成
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }} 
+        run: |
+          aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} || true
+
+      # Lambda コンテナイメージのビルド
       - name: Dockerイメージのビルドとタグ付け (ECR)
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |          
+        run: |
           docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} -f ${{ env.LAMBDA_DOCKERFILE_PATH }} .
           docker tag ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
+      # Lambda コンテナイメージのプッシュ
       - name: ECRへイメージをプッシュ
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
 
-      # --- Terraformによるインフラ構築OK
-      - name: Terraformのセットアップ
+      # Terraformのセットアップ
+      - name: Terraform のセットアップ
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
+
+      # GCPのセットアップ
+      - name: GCPサービスアカウントキーのセットアップ
+        run: |
+          printf '%s' '${{ secrets.BIGQUERY_SA_KEY_JSON }}' > ${{ runner.temp }}/gcp-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${{ runner.temp }}/gcp-key.json" >> $GITHUB_ENV
           
+      # Terraform initの実行
       - name: Terraform Init
         run: terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform Validate
-        run: terraform validate
-        working-directory: ${{ env.TF_WORKING_DIR }}
-
+      # plan用認証
+      - name: AWS認証情報の構成 (OIDC)
+        id: assume-role-for-plan
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      # Terraform Plan
       - name: Terraform Plan
         id: plan
         run: |
-          -var="youtube_api_key=${{ secrets.YOUTUBE_API_KEY }}" \
-          -var="bigquery_sa_key_json=${{ secrets.GCP_SA_KEY_JSON }}" \
-          -out=tfplan
-        env:
-          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
-          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
+          terraform plan \
+            -var="youtube_api_key=${{ secrets.YOUTUBE_API_KEY }}" \
+            -var='bigquery_sa_key_json=${{ secrets.BIGQUERY_SA_KEY_JSON }}' \
+            -var="alert_email_endpoint=${{ secrets.ALERT_EMAIL_ENDPOINT }}" \
+            -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="gcp_region=${{ secrets.GCP_REGION }}" \
+            -out=tfplan
         working-directory: ${{ env.TF_WORKING_DIR }}
 
+      # Terraform Apply (一括)
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply tfplan
-        env:
-          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
-          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
         working-directory: ${{ env.TF_WORKING_DIR }}
-
-      # --- Glue JobスクリプトのS3へのアップロード
+        
+      # Glue JobスクリプトのS3へのアップロード
       - name: Glue JobスクリプトをS3にアップロード
         run: |
           aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
             --region ${{ secrets.AWS_REGION }}
+
+      # Destroy用認証
+      - name: AWS認証情報の構成 (OIDC)
+        id: assume-role-for-destroy
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Terraform Destroy
+      - name: Terraform Destroy (自動クリーンアップ)
+        if: always()
+        run: |
+          terraform destroy -auto-approve \
+            -var="youtube_api_key=${{ secrets.YOUTUBE_API_KEY }}" \
+            -var='bigquery_sa_key_json=${{ secrets.BIGQUERY_SA_KEY_JSON }}' \
+            -var="alert_email_endpoint=${{ secrets.ALERT_EMAIL_ENDPOINT }}" \
+            -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="gcp_region=${{ secrets.GCP_REGION }}"
+        working-directory: ${{ env.TF_WORKING_DIR }}
