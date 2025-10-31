@@ -95,6 +95,7 @@ jobs:
         run: terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
 
+      # plan用認証
       - name: AWS認証情報の構成 (OIDC)
         id: assume-role-for-plan
         uses: aws-actions/configure-aws-credentials@v4
@@ -127,6 +128,7 @@ jobs:
           aws s3 cp ${{ env.GLUE_SCRIPT_LOCAL_PATH }} s3://${{ env.GLUE_SCRIPT_BUCKET }}/${{ env.GLUE_SCRIPT_S3_PATH }} \
             --region ${{ secrets.AWS_REGION }}
 
+      # Destroy用認証
       - name: AWS認証情報の構成 (OIDC)
         id: assume-role-for-destroy
         uses: aws-actions/configure-aws-credentials@v4
@@ -134,6 +136,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # Terraform Destroy
       - name: Terraform Destroy (自動クリーンアップ)
         if: always()
         run: |
