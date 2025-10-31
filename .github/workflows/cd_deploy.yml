@@ -54,6 +54,10 @@ jobs:
       - name: ECRへログイン
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        with:
+          aws-access-key-id: ${{ steps.assume-role.outputs.access_key_id }}
+          aws-secret-access-key: ${{ steps.assume-role.outputs.secret_access_key }}
+          aws-session-token: ${{ steps.assume-role.outputs.session_token }}
 
       # ECRリポジトリの事前作成
       - name: ECRリポジトリの初回作成
