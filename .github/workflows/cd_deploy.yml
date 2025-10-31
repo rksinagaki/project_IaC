@@ -44,6 +44,12 @@ jobs:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: AWSクレデンシャルの環境変数登録
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ steps.assume-role.outputs.access_key_id }}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{ steps.assume-role.outputs.secret_access_key }}" >> $GITHUB_ENV
+          echo "AWS_SESSION_TOKEN=${{ steps.assume-role.outputs.session_token }}" >> $GITHUB_ENV
+
       # ECR ログイン
       - name: ECRへログイン
         id: login-ecr
@@ -86,24 +92,24 @@ jobs:
       - name: Terraform Init
         run: terraform init
         env:
-          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
-          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
+          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ env.AWS_SESSION_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: 認証情報の確認（AWS/GCP）
+      - name: 認証情報の最終確認（AWS/GCP）
         run: |
+          echo "✅ AWS認証情報の確認:"
           echo "AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID"
-          echo "GOOGLE_APPLICATION_CREDENTIALS: $GOOGLE_APPLICATION_CREDENTIALS"
-          echo "GCPキーの内容:"
-          cat $GOOGLE_APPLICATION_CREDENTIALS
-        env:
-          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
-          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
-        working-directory: ${{ env.TF_WORKING_DIR }}
+          echo "AWS_SESSION_TOKEN: $AWS_SESSION_TOKEN"
+          
+          echo "✅ GCP認証情報の確認:"
+          echo "GOOGLE_APPLICATION_CREDENTIALS_PATH: $GOOGLE_APPLICATION_CREDENTIALS"
+          
+          echo "⚠️ GCPキーの内容の確認（最初の200文字）:"
+          head -c 200 $GOOGLE_APPLICATION_CREDENTIALS
+          echo "..."
       
       # Terraform Plan
       - name: Terraform Plan
@@ -117,9 +123,9 @@ jobs:
             -var="gcp_region=${{ secrets.GCP_REGION }}" \
             -out=tfplan
         env:
-          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
-          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
+          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ env.AWS_SESSION_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         working-directory: ${{ env.TF_WORKING_DIR }}
 
@@ -128,9 +134,9 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply tfplan
         env:
-          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
-          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
+          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ env.AWS_SESSION_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         working-directory: ${{ env.TF_WORKING_DIR }}
         
