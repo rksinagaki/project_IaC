@@ -79,12 +79,25 @@ jobs:
 
       - name: GCPサービスアカウントキーのセットアップ
         run: |
-          echo "${{ secrets.BIGQUERY_SA_KEY_JSON }}" > ${{ runner.temp }}/gcp-key.json
+          echo "${{ secrets.BIGQUERY_SA_KEY_JSON }}" | base64 -d > ${{ runner.temp }}/gcp-key.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=${{ runner.temp }}/gcp-key.json" >> $GITHUB_ENV
           
       # ここから(ネットの記事を参考に実装する。TerraformがAWSとGCPの権限を受け取れていない。)
       - name: Terraform Init
         run: terraform init
+        env:
+          AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
+          AWS_SESSION_TOKEN: ${{ steps.assume-role.outputs.session_token }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      - name: 認証情報の確認（AWS/GCP）
+        run: |
+          echo "AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID"
+          echo "GOOGLE_APPLICATION_CREDENTIALS: $GOOGLE_APPLICATION_CREDENTIALS"
+          echo "GCPキーの内容:"
+          cat $GOOGLE_APPLICATION_CREDENTIALS
         env:
           AWS_ACCESS_KEY_ID: ${{ steps.assume-role.outputs.access_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ steps.assume-role.outputs.secret_access_key }}
