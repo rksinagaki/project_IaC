@@ -2,6 +2,14 @@ name: Continuous Deployment (CD) Pipeline with Terraform
 
 on:
   workflow_dispatch:
+    inputs:
+      job_to_run:
+        description: 'Select the job to run'
+        required: true
+        type: choice
+        options:
+          - deploy
+          - destroy
 
 # 環境変数
 env:
@@ -25,7 +33,7 @@ jobs:
   manual-deploy:
     timeout-minutes: 10
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' 
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'manual-deploy'
     permissions:
       id-token: write 
       contents: read
@@ -123,7 +131,7 @@ jobs:
   manual-destroy:
     timeout-minutes: 5
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'manual-destroy'
     environment: production
     
     permissions:
