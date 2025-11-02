@@ -1,4 +1,4 @@
-name: Continuous Deployment (CD) Pipeline with Terraform
+name: Deployment:CD Pipeline with Terraform
 
 on:
   workflow_dispatch:

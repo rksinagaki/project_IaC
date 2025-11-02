@@ -162,10 +162,7 @@ def get_comments_for_video(video_id, max_comments_per_video=100):
             })
     
     except Exception as e:
-        if e.resp.status == 403 and "commentsDisabled" in str(e):
-            print(f"コメントが無効な動画: {video_id}")
-        else:
-            print(f"コメント取得失敗: {video_id} - {e}")
+        print(f"コメント取得中にエラー発生。この動画はスキップします: {video_id}. エラー詳細: {e}")
 
     return comments_data
 
