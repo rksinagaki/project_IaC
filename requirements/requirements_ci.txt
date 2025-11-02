@@ -5,7 +5,7 @@ flake8
 black
 
 numpy==1.26.4
-pandas==2.0.3
+pandas==2.2.2 # actionsの読み込みを早くするため新しいバージョンに変更
 google-api-python-client==2.182.0
 requests==2.32.5
 aws-lambda-powertools==3.20.0
