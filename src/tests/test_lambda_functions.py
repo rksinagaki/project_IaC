@@ -3,7 +3,8 @@ from unittest.mock import patch, MagicMock
 import json
 import os
 
-from src.lambda.lambda_test import get_youtube_api_key, get_channel, get_video, lambda_handler
+from src.lambda.lambda_test import lambda_handler
+# from src.lambda.lambda_test import get_youtube_api_key, get_channel, get_video, lambda_handler
 
 
 # チャンネル情報APIレスポンスのモック
