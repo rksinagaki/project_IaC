@@ -9,15 +9,12 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
-from pyspark.sql.functions import col, when, to_date, regexp_replace, trim, lit, sum
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     StructType,
     StructField,
     StringType,
-    LongType,
-    TimestampType,
-    BooleanType,
+    LongType
 )
 from pyspark.sql.window import Window
 
@@ -230,19 +227,19 @@ df_video = df_video.withColumn(
     "total_seconds",
     (
         F.coalesce(
-            F.regexp_extract(F.col("duration"), "(\d+)H", 1).cast(LongType()), F.lit(0)
+            F.regexp_extract(F.col("duration"), r"(\d+)H", 1).cast(LongType()), F.lit(0)
         )
         * 3600
     )
     + (
         F.coalesce(
-            F.regexp_extract(F.col("duration"), "(\d+)M", 1).cast(LongType()), F.lit(0)
+            F.regexp_extract(F.col("duration"), r"(\d+)M", 1).cast(LongType()), F.lit(0)
         )
         * 60
     )
     + (
         F.coalesce(
-            F.regexp_extract(F.col("duration"), "(\d+)S", 1).cast(LongType()), F.lit(0)
+            F.regexp_extract(F.col("duration"), r"(\d+)S", 1).cast(LongType()), F.lit(0)
         )
     ),
 )
