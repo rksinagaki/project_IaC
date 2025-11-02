@@ -1,5 +1,4 @@
 pytest
-unittest.mock
 boto3-stubs
 moto
 flake8
