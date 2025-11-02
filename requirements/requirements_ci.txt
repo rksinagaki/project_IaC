@@ -2,6 +2,7 @@ pytest
 unittest.mock
 boto3-stubs
 moto
+flake8
 
 numpy==1.26.4
 pandas==2.0.3

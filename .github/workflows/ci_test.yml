@@ -37,8 +37,7 @@ jobs:
       # 必要ライブラリのインストール
       - name: 依存関係とCIツールのインストール
         run: |
-          pip install -r requirements_ci.txt
-          pip install flake8 pytest
+          pip install -r requirements/requirements_ci.txt
 
       # 静的解析
       - name: コードのLintチェック
