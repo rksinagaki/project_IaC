@@ -44,11 +44,34 @@
             "States.ALL"
           ],
           "ResultPath": "$.ErrorDetails",
-          "Next": "NotifyFailure"
+          "Next": "Lambda Invoke"
         }
       ],
       "Next": "StartCrawler",
       "TimeoutSeconds": 300
+    },
+    "Lambda Invoke": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "OutputPath": "$.Payload",
+      "Parameters": {
+        "Payload.$": "$"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "NotifyFailure"
     },
     "StartCrawler": {
       "Type": "Task",
@@ -72,7 +95,7 @@
             "States.ALL"
           ],
           "ResultPath": "$.ErrorDetails",
-          "Next": "NotifyFailure"
+          "Next": "Lambda Invoke"
         }
       ],
       "Next": "WaitForCrawler"
@@ -106,45 +129,10 @@
         {
           "Variable": "$.Crawler.State",
           "StringEquals": "READY",
-          "Next": "CheckLastCrawlResult"
-        }
-      ],
-      "Default": "IncrementRetry"
-    },
-    "IncrementRetry": {
-      "Type": "Pass",
-      "Parameters": {
-        "retry_count.$": "States.MathAdd($.retry_count, 1)",
-        "max_retries": 5
-      },
-      "ResultPath": "$.retry_meta",
-      "Next": "CheckRetryLimit"
-    },
-    "CheckRetryLimit": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.retry_meta.retry_count",
-          "NumericGreaterThanEquals": 5,
-          "Next": "NotifyFailure"
+          "Next": "NotifySuccess"
         }
       ],
       "Default": "WaitForCrawler"
-    },
-    "CheckLastCrawlResult": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.Crawler.LastCrawl.Status",
-          "StringEquals": "SUCCEEDED",
-          "Next": "NotifySuccess"
-        },
-        {
-          "Variable": "$.Crawler.LastCrawl.Status",
-          "StringEquals": "FAILED",
-          "Next": "NotifyFailure"
-        }
-      ]
     },
     "NotifySuccess": {
       "Type": "Task",
