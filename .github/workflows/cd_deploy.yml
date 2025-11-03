@@ -33,7 +33,7 @@ jobs:
   manual-deploy:
     timeout-minutes: 10
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'manual-deploy'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'deploy'
     permissions:
       id-token: write 
       contents: read
@@ -131,7 +131,7 @@ jobs:
   manual-destroy:
     timeout-minutes: 5
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'manual-destroy'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'destroy'
     environment: production
     
     permissions:
