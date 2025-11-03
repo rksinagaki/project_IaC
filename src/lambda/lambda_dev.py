@@ -184,9 +184,8 @@ def get_comments_for_video(video_id, max_comments_per_video=100):
             )
 
     except Exception as e:
-        print(
-            f"コメント取得中にエラー発生。この動画はスキップします: {video_id}. エラー詳細: {e}"
-        )
+        logger.exception(f"コメント取得中にエラー発生。この動画はスキップします: {video_id}. エラー詳細: {e}")
+        return []
 
     return comments_data
 
