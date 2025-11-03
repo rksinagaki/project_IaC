@@ -76,7 +76,9 @@ module "youtube_secret" {
   description             = "YouTube Data API Key for data scraper"
   recovery_window_in_days = 14
   create_random_password = false 
-  secret_string = var.youtube_api_key
+  secret_string = jsonencode({
+    API_KEY = var.youtube_api_key
+  })
   create_policy = false
 }
 
