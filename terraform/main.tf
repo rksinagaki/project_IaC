@@ -853,7 +853,7 @@ module "lambda_clean_back" {
   description   = "ワークフローが途中で止まった際にクリーンバックします。"
   handler       = "clean_up_lambda.lambda_handler"
   runtime       = "python3.12"
-  source_path = "../src/lambda"
+  source_path = "../src/clean_up"
   tags = var.project_tags
 
   create_role = true
