@@ -852,16 +852,17 @@ module "lambda_clean_back" {
   function_name = "youtube_clean_back_function"
   description   = "ワークフローが途中で止まった際にクリーンバックします。"
   handler       = "clean_up_lambda.lambda_handler"
-  runtime       = "python3.13"
+  runtime       = "python3.12"
   source_path = "../src/lambda"
   tags = var.project_tags
 
-  attach_policy = true
   create_role = true
 
   attach_cloudwatch_logs_policy = true
   attach_create_log_group_permission = true
 
+  attach_policy_json = true
+  # attach_policy = true
   policy_json = jsonencode({
     Version = "2012-10-17",
     Statement = [
