@@ -305,6 +305,9 @@ EOF
     sns = {
       sns = [aws_sns_topic.alert_topic_sfn.arn]
     }
+    lambda = {
+      lambda = [module.lambda_clean_back.lambda_function_arn]
+    }
   }
 
   logging_configuration = {
@@ -841,4 +844,48 @@ module "dlq_event_alarm" {
   }
 
   alarm_actions = [aws_sns_topic.alert_topic_sfn.arn]
+}
+
+module "lambda_clean_back" {
+  source = "terraform-aws-modules/lambda/aws"
+
+  function_name = "youtube_clean_back_function"
+  description   = "ワークフローが途中で止まった際にクリーンバックします。"
+  handler       = "clean_up_lambda.lambda_handler"
+  runtime       = "python3.13"
+  source_path = "../src/lambda"
+  tags = var.project_tags
+
+  attach_policy = true
+  create_role = true
+
+  attach_cloudwatch_logs_policy = true
+  attach_create_log_group_permission = true
+
+  policy_json = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectAcl",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ],
+        Resource = [
+          "arn:aws:s3:::${var.data_bucket_name}",
+          "arn:aws:s3:::${var.data_bucket_name}/*"
+        ]
+      }
+      # Glue パーティション削除権限 (Glueカタログのクリーンアップを行う場合)
+      # {
+      #   Effect = "Allow",
+      #   Action = [
+      #     "glue:DeletePartition"
+      #   ],
+      #   Resource = "*"
+      # }
+    ]
+  })
 }
