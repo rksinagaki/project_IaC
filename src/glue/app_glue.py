@@ -13,7 +13,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 from pyspark.sql.window import Window
 
-## @params: [JOB_NAME]
+# @params: [JOB_NAME]
 args = getResolvedOptions(
     sys.argv,
     [
