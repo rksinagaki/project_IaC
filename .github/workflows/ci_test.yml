@@ -37,6 +37,14 @@ jobs:
         run: |
           pip install -r requirements/requirements_ci.txt
 
+      # 静的解析
+      - name: コードのLintチェック
+        run: flake8 --ignore=E501,W503,F401,F403 ./src
+
+      # # Python単体テストの実行
+      # - name: Pytestによる単体テスト
+      #   run: pytest ./src/tests
+
       # Terraformの検証
       - name: Terraformのセットアップ
         uses: hashicorp/setup-terraform@v3
@@ -49,16 +57,19 @@ jobs:
           printf '%s' '${{ secrets.BIGQUERY_SA_KEY_JSON }}' > ${{ runner.temp }}/gcp-key.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=${{ runner.temp }}/gcp-key.json" >> $GITHUB_ENV
       
+      # ASWのセットアップ
       - name: AWS認証情報の構成 (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
       
+      # Terraform Init
       - name: Terraform Init
         run: terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
-          
+
+      # Terraform Validate 
       - name: Terraform Validate
         run: terraform validate
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -75,13 +86,3 @@ jobs:
             -var="gcp_region=${{ secrets.GCP_REGION }}" \
             -out=tfplan
         working-directory: ${{ env.TF_WORKING_DIR }}
-
-      # 静的解析
-      - name: コードのLintチェック
-        run: flake8 --ignore=E501,W503,F401,F403 ./src
-
-      # # Python単体テストの実行
-      # - name: Pytestによる単体テスト
-      #   run: pytest ./src/tests
-
-      
