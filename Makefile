@@ -7,5 +7,5 @@ run-container:
 		--name terraform-session \
 		terraform-aws-env:v1.0 bash
 
-terraform-init:
-	
+run-container-linter:
+	docker container run -it --rm -v "$(PWD)":/app my-black-linter /bin/bash

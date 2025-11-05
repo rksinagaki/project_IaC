@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       job_to_run:
-        description: 'Select the job to run'
+        description: '実行するCDを選択してください'
         required: true
         type: choice
         options:

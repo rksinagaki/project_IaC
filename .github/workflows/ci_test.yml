@@ -42,6 +42,9 @@ jobs:
       - name: 依存関係とCIツールのインストール
         run: |
           pip install -r requirements/requirements_ci.txt
+      
+      - name: コードの自動整形チェック (Black)
+        run: black --check ./src
 
       # 静的解析
       - name: コードのLintチェック
