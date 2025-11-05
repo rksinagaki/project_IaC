@@ -216,7 +216,7 @@ module "step-function" {
             "States.TaskFailed"
           ],
           "IntervalSeconds": 30,
-          "MaxAttempts": 3,
+          "MaxAttempts": 1,
           "BackoffRate": 2
         }
       ],
@@ -249,7 +249,7 @@ module "step-function" {
             "Lambda.TooManyRequestsException"
           ],
           "IntervalSeconds": 1,
-          "MaxAttempts": 3,
+          "MaxAttempts": 1,
           "BackoffRate": 2,
           "JitterStrategy": "FULL"
         }
@@ -270,7 +270,7 @@ module "step-function" {
             "States.TaskFailed"
           ],
           "IntervalSeconds": 30,
-          "MaxAttempts": 3,
+          "MaxAttempts": 1,
           "BackoffRate": 2
         }
       ],
