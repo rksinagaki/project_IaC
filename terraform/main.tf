@@ -216,7 +216,7 @@ module "step-function" {
             "States.TaskFailed"
           ],
           "IntervalSeconds": 30,
-          "MaxAttempts": 3,
+          "MaxAttempts": 1,
           "BackoffRate": 2
         }
       ],
@@ -226,10 +226,35 @@ module "step-function" {
             "States.ALL"
           ],
           "ResultPath": "$.ErrorDetails",
-          "Next": "NotifyFailure"
+          "Next": "Lambda Invoke"
         }
       ],
-      "Next": "StartCrawler"
+      "Next": "StartCrawler",
+      "TimeoutSeconds": 450
+    },
+    "Lambda Invoke": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "OutputPath": "$.Payload",
+      "Parameters": {
+        "Payload.$": "$",
+        "FunctionName": "${module.lambda_clean_back.lambda_function_arn}"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 1,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "NotifyFailure"
     },
     "StartCrawler": {
       "Type": "Task",
@@ -245,7 +270,7 @@ module "step-function" {
             "States.TaskFailed"
           ],
           "IntervalSeconds": 30,
-          "MaxAttempts": 3,
+          "MaxAttempts": 1,
           "BackoffRate": 2
         }
       ],
@@ -257,7 +282,8 @@ module "step-function" {
           "Next": "NotifyFailure",
           "Comment": "Crawler Failure"
         }
-      ]
+      ],
+      "TimeoutSeconds": 450
     },
     "NotifySuccess": { 
       "Type": "Task",
@@ -852,16 +878,16 @@ module "lambda_clean_back" {
   function_name = "youtube_clean_back_function"
   description   = "ワークフローが途中で止まった際にクリーンバックします。"
   handler       = "clean_up_lambda.lambda_handler"
-  runtime       = "python3.13"
-  source_path = "../src/lambda"
+  runtime       = "python3.12"
+  source_path = "../src/clean_up"
   tags = var.project_tags
 
-  attach_policy = true
   create_role = true
 
   attach_cloudwatch_logs_policy = true
   attach_create_log_group_permission = true
 
+  attach_policy_json = true
   policy_json = jsonencode({
     Version = "2012-10-17",
     Statement = [

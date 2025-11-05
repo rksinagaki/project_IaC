@@ -10,12 +10,7 @@ from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from pyspark.sql import functions as F
-from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    LongType
-)
+from pyspark.sql.types import StructType, StructField, StringType, LongType
 from pyspark.sql.window import Window
 
 ## @params: [JOB_NAME]
@@ -134,9 +129,7 @@ def run_data_quality_check(df, glueContext, df_name, result_s3_prefix):
     dq_failed_count = outcomes_df.filter(F.col("Outcome") == "Failed").count()
 
     if dq_failed_count > 0:
-        dq_failed_rules = outcomes_df.filter(
-            F.col("Outcome") == "Failed"
-        ).collect()  # コスト注意
+        dq_failed_rules = outcomes_df.filter(F.col("Outcome") == "Failed").collect()
         for rule in dq_failed_rules:
             log_json(
                 "DQ Rule Failed. Data will NOT be committed.",

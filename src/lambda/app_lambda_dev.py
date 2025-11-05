@@ -6,25 +6,15 @@ import pandas as pd
 from googleapiclient.discovery import build
 from aws_lambda_powertools import Logger
 
-logger = Logger()
-secretsmanager_client = boto3.client("secretsmanager")
-
-
 # シークレットを取得する関数
+secretsmanager_client = boto3.client("secretsmanager")
+SECRET_ARN = os.environ.get("YOUTUBE_API_KEY_ARN")
+
+
 def get_youtube_api_key(secret_arn):
-    try:
-        response = secretsmanager_client.get_secret_value(SecretId=secret_arn)
-        secret_data = json.loads(response["SecretString"])
-
-        api_key = secret_data.get("API_KEY")
-        if not api_key:
-            raise KeyError("Secret内に 'API_KEY' が存在しません。")
-
-        return api_key
-
-    except Exception as e:
-        logger.error(f"予期しないエラーが発生しました: {e}")
-        raise
+    response = secretsmanager_client.get_secret_value(SecretId=secret_arn)
+    secret_data = json.loads(response["SecretString"])
+    return secret_data["API_KEY"]
 
 
 # /////////////////
@@ -32,17 +22,12 @@ def get_youtube_api_key(secret_arn):
 # /////////////////
 BUCKET_NAME = os.environ.get("BUCKET_NAME")
 REGION_NAME = os.environ.get("REGION_NAME")
-SECRET_ARN = os.environ.get("YOUTUBE_API_KEY_ARN")
+API_KEY = get_youtube_api_key(SECRET_ARN)
 EVENT_SOURCE = "my-scraper"  # 後で変更
 EVENT_DETAIL_TYPE = "ScrapingCompleted"  # 後で変更
 
-# API KEYを取得
-try:
-    API_KEY = get_youtube_api_key(SECRET_ARN)
-    youtube = build("youtube", "v3", developerKey=API_KEY)
-except Exception as e:
-    logger.exception("初期化処理に失敗しました。Lambdaを終了します。")
-    raise e
+youtube = build("youtube", "v3", developerKey=API_KEY)
+logger = Logger()
 
 
 # /////////////////
@@ -184,8 +169,10 @@ def get_comments_for_video(video_id, max_comments_per_video=100):
             )
 
     except Exception as e:
-        logger.exception(f"コメント取得中にエラー発生。この動画はスキップします: {video_id}. エラー詳細: {e}")
-        return []
+        if e.resp.status == 403 and "commentsDisabled" in str(e):
+            print(f"コメントが無効な動画: {video_id}")
+        else:
+            print(f"コメント取得失敗: {video_id} - {e}")
 
     return comments_data
 
@@ -235,7 +222,7 @@ def lambda_handler(event, context):
     # コメントデータの格納
     top_videos_df = df_videos.sort_values(by="view_count", ascending=False).head(
         10
-    )  # 本来は100に変更
+    )  # 本来は100
 
     all_comments = []
     for index, row in top_videos_df.iterrows():
@@ -243,7 +230,7 @@ def lambda_handler(event, context):
         video_title = row["title"]
         comments = get_comments_for_video(
             video_id, max_comments_per_video=10
-        )  # 本来は100に変更
+        )  # 本来は100
         all_comments.extend(comments)
 
     output_comment = StringIO()

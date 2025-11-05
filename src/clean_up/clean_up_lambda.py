@@ -37,16 +37,15 @@ def lambda_handler(event, context):
         
         if not decoded_payload or not isinstance(decoded_payload, dict):
             logger.error("Could not find valid 'decoded_payload' in the event.")
-            return {'statusCode': 200, 'body': 'Failed to parse payload. Skipping cleanup.'}
+            return event
 
         bucket_name = decoded_payload.get('bucket_name')
         processed_base_path = decoded_payload.get('processed_base_path')
         
         if not bucket_name or not processed_base_path:
             logger.error("Missing bucket_name or processed_base_path. Cannot perform S3 cleanup.")
-            return {'statusCode': 200, 'body': 'Missing path info. Skipping cleanup.'}
+            return event
 
-        # ここから
         # 1. full_key から bucket_name を除去してS3キーを取得
         if processed_base_path.startswith(bucket_name + '/'):
             full_key = processed_base_path.replace(bucket_name + '/', '', 1)
@@ -61,12 +60,15 @@ def lambda_handler(event, context):
         
         # 3. 実行IDに関連する S3 上のすべてのデータを削除
         delete_s3_prefix(bucket_name, final_cleanup_key)
+
+        return event
         
     except Exception as e:
         logger.error(f"Critical error during cleanup execution: {e}", exc_info=True)
-        return {'statusCode': 200, 'body': 'Critical failure in cleanup. Finished with error logging.'}
-    
-    return {'statusCode': 200, 'body': 'Cleanup finished.'}
+        return event
+
+
+
 
 # def delete_glue_table(database_name, table_name):
 #     glue = boto3.client('glue')
