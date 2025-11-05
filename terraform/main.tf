@@ -226,10 +226,35 @@ module "step-function" {
             "States.ALL"
           ],
           "ResultPath": "$.ErrorDetails",
-          "Next": "NotifyFailure"
+          "Next": "Lambda Invoke"
         }
       ],
-      "Next": "StartCrawler"
+      "Next": "StartCrawler",
+      "TimeoutSeconds": 450
+    },
+    "Lambda Invoke": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "OutputPath": "$.Payload",
+      "Parameters": {
+        "Payload.$": "$",
+        "FunctionName": "${module.lambda_clean_back.lambda_function_arn}"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "NotifyFailure"
     },
     "StartCrawler": {
       "Type": "Task",
@@ -257,7 +282,8 @@ module "step-function" {
           "Next": "NotifyFailure",
           "Comment": "Crawler Failure"
         }
-      ]
+      ],
+      "TimeoutSeconds": 450
     },
     "NotifySuccess": { 
       "Type": "Task",
@@ -862,7 +888,6 @@ module "lambda_clean_back" {
   attach_create_log_group_permission = true
 
   attach_policy_json = true
-  # attach_policy = true
   policy_json = jsonencode({
     Version = "2012-10-17",
     Statement = [
