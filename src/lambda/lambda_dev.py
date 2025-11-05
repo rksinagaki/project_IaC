@@ -184,9 +184,8 @@ def get_comments_for_video(video_id, max_comments_per_video=100):
             )
 
     except Exception as e:
-        print(
-            f"コメント取得中にエラー発生。この動画はスキップします: {video_id}. エラー詳細: {e}"
-        )
+        logger.exception(f"コメント取得中にエラー発生。この動画はスキップします: {video_id}. エラー詳細: {e}")
+        return []
 
     return comments_data
 
@@ -236,7 +235,7 @@ def lambda_handler(event, context):
     # コメントデータの格納
     top_videos_df = df_videos.sort_values(by="view_count", ascending=False).head(
         10
-    )  # 本来は100
+    )  # 本来は100に変更
 
     all_comments = []
     for index, row in top_videos_df.iterrows():
@@ -244,7 +243,7 @@ def lambda_handler(event, context):
         video_title = row["title"]
         comments = get_comments_for_video(
             video_id, max_comments_per_video=10
-        )  # 本来は100
+        )  # 本来は100に変更
         all_comments.extend(comments)
 
     output_comment = StringIO()
