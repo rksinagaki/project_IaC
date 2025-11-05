@@ -43,6 +43,24 @@ jobs:
         run: |
           pip install -r requirements/requirements_ci.txt
 
+      # Terraformの検証
+      - name: Terraformのセットアップ
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+          
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      - name: Terraform Plan (変更点の確認)
+        run: terraform plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
       # 静的解析
       - name: コードのLintチェック
         run: flake8 --ignore=E501,W503,F401,F403 ./src
@@ -51,20 +69,4 @@ jobs:
       # - name: Pytestによる単体テスト
       #   run: pytest ./src/tests
 
-      # # Terraformの検証
-      # - name: Terraformのセットアップ
-      #   uses: hashicorp/setup-terraform@v3
-      #   with:
-      #     terraform_version: ${{ env.TF_VERSION }}
       
-      # - name: Terraform Init
-      #   run: terraform init
-      #   working-directory: ${{ env.TF_WORKING_DIR }}
-          
-      # - name: Terraform Validate
-      #   run: terraform validate
-      #   working-directory: ${{ env.TF_WORKING_DIR }}
-
-      # - name: Terraform Plan (変更点の確認)
-      #   run: terraform plan
-      #   working-directory: ${{ env.TF_WORKING_DIR }}
