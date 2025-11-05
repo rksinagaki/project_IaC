@@ -230,7 +230,7 @@ module "step-function" {
         }
       ],
       "Next": "StartCrawler",
-      "TimeoutSeconds": 450
+      "TimeoutSeconds": 300
     },
     "Lambda Invoke": {
       "Type": "Task",
@@ -254,7 +254,8 @@ module "step-function" {
           "JitterStrategy": "FULL"
         }
       ],
-      "Next": "NotifyFailure"
+      "Next": "NotifyFailure",
+      "TimeoutSeconds": 300
     },
     "StartCrawler": {
       "Type": "Task",
@@ -283,7 +284,7 @@ module "step-function" {
           "Comment": "Crawler Failure"
         }
       ],
-      "TimeoutSeconds": 450
+      "TimeoutSeconds": 300
     },
     "NotifySuccess": { 
       "Type": "Task",
@@ -682,7 +683,7 @@ resource "aws_glue_job" "youtube_data_processing_job" {
   role_arn         = aws_iam_role.glue_job_execution_role.arn 
   glue_version     = "5.0"
   max_retries      = 2
-  timeout          = 20
+  timeout          = 10
   number_of_workers = 2
   worker_type      = "G.1X"
   
