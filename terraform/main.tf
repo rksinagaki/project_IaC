@@ -286,7 +286,7 @@ module "step-function" {
       ],
       "TimeoutSeconds": 300
     },
-    "NotifySuccess": { 
+    "NotifySuccess": {
       "Type": "Task",
       "Resource": "arn:aws:states:::sns:publish",
       "Parameters": {

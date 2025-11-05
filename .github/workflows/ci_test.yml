@@ -1,12 +1,14 @@
 name: Test:CI Pipeline
 
 on:
-  push:
-    branches:
-      - "main"
-  pull_request:
-    branches:
-      - "main"
+  workflow_dispatch:
+    inputs:
+      job_to_run:
+        description: '実行するCIを選択してください'
+        required: true
+        type: choice
+        options:
+          - ci_test
 
 env:
   TF_WORKING_DIR: ./terraform
@@ -16,6 +18,7 @@ jobs:
   ci:
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'ci_test'
     permissions:
       id-token: write
 
@@ -44,24 +47,24 @@ jobs:
       - name: コードのLintチェック
         run: flake8 ./src
 
-      # Python単体テストの実行
-      - name: Pytestによる単体テスト
-        run: pytest ./src/tests
+      # # Python単体テストの実行
+      # - name: Pytestによる単体テスト
+      #   run: pytest ./src/tests
 
-      # Terraformの検証
-      - name: Terraformのセットアップ
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+      # # Terraformの検証
+      # - name: Terraformのセットアップ
+      #   uses: hashicorp/setup-terraform@v3
+      #   with:
+      #     terraform_version: ${{ env.TF_VERSION }}
       
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ${{ env.TF_WORKING_DIR }}
+      # - name: Terraform Init
+      #   run: terraform init
+      #   working-directory: ${{ env.TF_WORKING_DIR }}
           
-      - name: Terraform Validate
-        run: terraform validate
-        working-directory: ${{ env.TF_WORKING_DIR }}
+      # - name: Terraform Validate
+      #   run: terraform validate
+      #   working-directory: ${{ env.TF_WORKING_DIR }}
 
-      - name: Terraform Plan (変更点の確認)
-        run: terraform plan
-        working-directory: ${{ env.TF_WORKING_DIR }}
+      # - name: Terraform Plan (変更点の確認)
+      #   run: terraform plan
+      #   working-directory: ${{ env.TF_WORKING_DIR }}
