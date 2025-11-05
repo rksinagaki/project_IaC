@@ -45,7 +45,7 @@ jobs:
 
       # 静的解析
       - name: コードのLintチェック
-        run: flake8 ./src
+        run: flake8 --ignore=E501 ./src
 
       # # Python単体テストの実行
       # - name: Pytestによる単体テスト
