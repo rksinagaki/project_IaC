@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+env = [
+    "AWS_REGION=us-east-1",
+    "AWS_DEFAULT_REGION=us-east-1",
+    "BUCKET_NAME=dummy-bucket-for-test",
+    "REGION_NAME=us-east-1",
+    "YOUTUBE_API_KEY_ARN=arn:aws:secretsmanager:us-east-1:000000000000:secret:dummy-key",
+    "EVENT_SOURCE=my-scraper",
+    "EVENT_DETAIL_TYPE=ScrapingCompleted",
+    "AWS_ACCESS_KEY_ID=testing",
+    "AWS_SECRET_ACCESS_KEY=testing"
+]

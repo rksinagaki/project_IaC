@@ -7,5 +7,5 @@ run-container:
 		--name terraform-session \
 		terraform-aws-env:v1.0 bash
 
-run-container-linter:
-	docker container run -it --rm -v "$(PWD)":/app ci_youtube_project /bin/bash
+run-container-test:
+	docker container run -it --rm -v "$(PWD)":/app youtube_ci_test:v2.0 /bin/bash
