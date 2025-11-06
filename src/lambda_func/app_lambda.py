@@ -7,7 +7,6 @@ from googleapiclient.discovery import build
 from aws_lambda_powertools import Logger
 
 logger = Logger()
-# secretsmanager_client = boto3.client("secretsmanager")
 
 # /////////////////
 # 環境変数読み込み
@@ -34,18 +33,6 @@ def get_youtube_api_key(secret_arn):
     except Exception as e:
         logger.error(f"予期しないエラーが発生しました: {e}")
         raise
-
-
-
-
-# API KEYを取得
-# try:
-#     # API_KEY = get_youtube_api_key(SECRET_ARN) # 修正しました
-#     youtube = build("youtube", "v3", developerKey=API_KEY)
-# except Exception as e:
-#     logger.exception("初期化処理に失敗しました。Lambdaを終了します。")
-#     raise e
-
 
 # /////////////////
 # チャンネル情報の取得
@@ -152,7 +139,6 @@ def get_uploads_playlist_id(youtube, channel_id):
         "uploads"
     ]
 
-
 # /////////////////
 # コメント情報の取得
 # /////////////////
@@ -193,11 +179,11 @@ def get_comments_for_video(youtube, video_id, max_comments_per_video=100):
 
     return comments_data
 
-
 # /////////////////
 # lambda関数実行
 # /////////////////
 def lambda_handler(event, context):
+    # スケジューラーから引き継ぐ環境変数
     CHANNEL_ID = event.get("CHANNEL_ID")
     ARTIST_NAME_DISPLAY = event.get("ARTIST_NAME_DISPLAY")
     ARTIST_NAME_SLUG = event.get("ARTIST_NAME_SLUG")
@@ -308,7 +294,6 @@ def lambda_handler(event, context):
     logger.info("lambdaハンドラーが完了しました。")
 
     return {"statusCode": 200, "message": "Scraping and event publication complete."}
-
 
 # 参考：EventBridgeに送信される情報の中身
 # {

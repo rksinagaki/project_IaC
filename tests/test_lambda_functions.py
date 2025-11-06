@@ -4,116 +4,125 @@ import json
 import os
 from src.lambda_func.app_lambda import get_youtube_api_key, get_channel, get_video, lambda_handler
 
-# チャンネル情報APIレスポンスのモック
-MOCK_CHANNEL_RESPONSE = {
-    "items": [
-        {
-            "id": "UC_TESTID",
-            "snippet": {"title": "Test Channel", "publishedAt": "2020-01-01T00:00:00Z"},
-            "statistics": {
-                "subscriberCount": "1000",
-                "viewCount": "50000",
-                "videoCount": "50",
-            },
-        }
-    ]
-}
-
-# 動画情報APIレスポンスのモック
-MOCK_VIDEO_RESPONSE = {
-    "items": [
-        {
-            "id": "video_test",
-            "snippet": {
-                "title": "Video 1",
-                "publishedAt": "2023-01-01T00:00:00Z",
-                "tags": ["tag_test"],
-            },
-            "statistics": {"viewCount": "100", "likeCount": "10", "commentCount": "5"},
-            "contentDetails": {"duration": "PT10M"},
-        }
-    ]
-}
-
 # SecretsManagerのモック化テスト
-@patch("src.lambda_func.app_lambda.secretsmanager_client")
-def test_get_youtube_api_key_success(mock_secretsmanager):
-    mock_secretsmanager.get_secret_value.return_value = {
-        "SecretString": json.dumps({"API_KEY": "MOCK_KEY_123"})
+@patch('src.lambda_func.app_lambda.boto3.client') 
+def test_get_youtube_api_key_success(mock_boto_client):
+    mock_secretsmanager_client = mock_boto_client.return_value
+    
+    TEST_API_KEY = "dummy_test_api_key_123"
+    mock_secretsmanager_client.get_secret_value.return_value = {
+        'SecretString': json.dumps({"API_KEY": TEST_API_KEY})
     }
-    key = get_youtube_api_key("test-arn")
 
-    assert key == "MOCK_KEY_123"
-    pass
+    result = get_youtube_api_key("dummy_arn")
 
+    assert result == TEST_API_KEY
 
-'''
+# get_channelモジュールテスト
+def test_get_channel_success():
+    mock_youtube_client = MagicMock()
+    
+    TEST_CHANNEL_ID = "UC_test_ID_456"
+    
+    mock_api_response = {
+        "items": [
+            {
+                "id": TEST_CHANNEL_ID,
+                "snippet": {
+                    "title": "テストチャンネル", 
+                    "publishedAt": "2023-10-25T00:00:00Z"
+                },
+                "statistics": {
+                    "subscriberCount": "1000",
+                    "viewCount": "1000",
+                    "videoCount": "1000"
+                }
+            }
+        ]
+    }
+    
+    mock_youtube_client.channels.return_value.list.return_value.execute.return_value = mock_api_response
 
-# YouTube API呼び出し部分のみをモック化
-@patch("src.lambda_func.app_lambda.youtube")
-def test_get_channel_data_integrity(mock_youtube):
-    mock_youtube.channels.return_value.list.return_value.execute.return_value = (
-        MOCK_CHANNEL_RESPONSE
-    )
-    channel_list = get_channel("UC_TESTID")
+    result = get_channel(mock_youtube_client, TEST_CHANNEL_ID)
 
-    assert len(channel_list) == 1
-    assert channel_list[0]["channel_id"] == "UC_TESTID"
-    assert isinstance(channel_list[0]["subscriber_count"], int)
-    assert channel_list[0]["subscriber_count"] == 1000
-    pass
+    channel_info = result[0]
+    
+    assert channel_info["channel_id"] == TEST_CHANNEL_ID
+    assert channel_info["channel_name"] == "テストチャンネル"
+    assert channel_info["subscriber_count"] == 1000
+    assert channel_info["video_count"] == 1000
 
-
-# lambda_handlerのオーケストレーション検証 (S3/EventBridge呼び出し)
-@patch("src.lambda_func.app_lambda.boto3.client")
-@patch("src.lambda_func.app_lambda.youtube")
-@patch(
-    "src.lambda_func.app_lambda.get_channel",
-    return_value=[{"channel_id": "UC_T", "data": "channel"}],
-)
-@patch(
-    "src.lambda_func.app_lambda.get_video",
-    return_value=[{"video_id": "v1", "view_count": 100, "title": "Test Video"}],
-)
-@patch(
-    "src.lambda_func.app_lambda.get_comments_for_video", return_value=[{"comment_id": "c1"}]
-)
-@patch.dict(
-    os.environ,
-    {"BUCKET_NAME": "MOCK_BUCKET", "REGION_NAME": "ap-northeast-1"},
-    clear=True,
-)  # 環境変数をモック
-def test_handler_s3_and_eventbridge_called(
-    mock_get_comments, mock_get_video, mock_get_channel, mock_youtube, mock_boto_client
+# lambda_handlerモジュールのテスト
+@patch('src.lambda_func.app_lambda.get_comments_for_video')
+@patch('src.lambda_func.app_lambda.get_video')
+@patch('src.lambda_func.app_lambda.get_channel')
+@patch('src.lambda_func.app_lambda.get_youtube_api_key')
+@patch('src.lambda_func.app_lambda.build')
+@patch('src.lambda_func.app_lambda.boto3.client')
+@patch('src.lambda_func.app_lambda.pd.DataFrame')
+def test_lambda_handler_success(
+    mock_df,
+    mock_boto_client,
+    mock_build,
+    mock_get_api_key,
+    mock_get_channel,
+    mock_get_video,
+    mock_get_comments,
 ):
 
-    # 準備: S3とEventsの偽物（モック）を作成
-    mock_s3 = MagicMock()
-    mock_events = MagicMock()
+    mock_get_api_key.return_value = "DUMMY_API_KEY"
 
-    # boto3.client('s3') が呼ばれたら mock_s3 を、boto3.client('events') が呼ばれたら mock_events を返す
-    mock_boto_client.side_effect = lambda service, **kwargs: {
-        "s3": mock_s3,
-        "events": mock_events,
-        # secretsmanager_clientはグローバルで初期化済みのため、ここではスキップ
-    }.get(service)
+    mock_youtube_client = MagicMock()
+    mock_build.return_value = mock_youtube_client
+    
+    mock_get_channel.return_value = [{"channel_id": "UC_TEST"}]
 
-    event = {
-        "CHANNEL_ID": "UC_TEST",
+    video_data = [
+        {"video_id": "v1", "view_count": 50000},
+        {"video_id": "v2", "view_count": 10000},
+    ]
+    mock_get_video.return_value = video_data
+
+    mock_get_comments.return_value = [{"comment_id": "c1"}]
+
+    mock_df_instance = MagicMock()
+    mock_df.return_value = mock_df_instance
+    
+    mock_s3_client = MagicMock()
+    mock_events_client = MagicMock()
+    def boto_client_side_effect(service_name, **kwargs):
+        if service_name == "s3":
+            return mock_s3_client
+        if service_name == "events":
+            return mock_events_client
+        return MagicMock()
+        
+    mock_boto_client.side_effect = boto_client_side_effect
+    
+    TEST_EVENT = {
+        "CHANNEL_ID": "UC_TEST_ID",
         "ARTIST_NAME_DISPLAY": "Test Artist",
-        "ARTIST_NAME_SLUG": "test-slug",
+        "ARTIST_NAME_SLUG": "test_artist_slug",
+        "POWERTOOLS_SERVICE_NAME": "youtube-scraper",
     }
-    context = MagicMock(aws_request_id="MOCK_EXECUTION_ID")
+    mock_context = MagicMock()
+    mock_context.aws_request_id = "test-execution-id" 
 
-    response = lambda_handler(event, context)
+    response = lambda_handler(TEST_EVENT, mock_context)
 
-    # 1. S3への保存が3回 (チャンネル, 動画, コメント) 実行されたこと
-    assert mock_s3.put_object.call_count == 3
+    mock_get_api_key.assert_called_once_with(os.environ["YOUTUBE_API_KEY_ARN"])
+    mock_build.assert_called_once_with("youtube", "v3", developerKey="DUMMY_API_KEY")
+    mock_get_channel.assert_called_once_with(mock_youtube_client, TEST_EVENT["CHANNEL_ID"])
+    mock_get_video.assert_called_once_with(mock_youtube_client, TEST_EVENT["CHANNEL_ID"])
+    
+    mock_boto_client.assert_any_call("s3", region_name=os.environ["REGION_NAME"])
+    
+    assert mock_s3_client.put_object.call_count == 3
 
-    # 2. EventBridgeへの情報引き継ぎが1回実行されたこと
-    mock_events.put_events.assert_called_once()
-
-    # 3. Lambdaが成功レスポンスを返したこと
+    mock_events_client.put_events.assert_called_once()
+    
+    put_events_args = mock_events_client.put_events.call_args[1]["Entries"][0]
+    assert put_events_args["Source"] == "my-scraper"
+    assert put_events_args["DetailType"] == "ScrapingCompleted"
+    assert put_events_args["EventBusName"] == "youtube-pipeline-event-bus"
     assert response["statusCode"] == 200
-
-    '''
