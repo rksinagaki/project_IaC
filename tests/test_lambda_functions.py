@@ -36,7 +36,7 @@ MOCK_VIDEO_RESPONSE = {
 }
 
 # SecretsManagerのモック化テスト
-@patch("src.lambda.lambda_test.secretsmanager_client")
+@patch("src.lambda_func.app_lambda.secretsmanager_client")
 def test_get_youtube_api_key_success(mock_secretsmanager):
     mock_secretsmanager.get_secret_value.return_value = {
         "SecretString": json.dumps({"API_KEY": "MOCK_KEY_123"})
@@ -48,7 +48,7 @@ def test_get_youtube_api_key_success(mock_secretsmanager):
 
 
 # YouTube API呼び出し部分のみをモック化
-@patch("src.lambda.lambda_test.youtube")
+@patch("src.lambda_func.app_lambda.youtube")
 def test_get_channel_data_integrity(mock_youtube):
     mock_youtube.channels.return_value.list.return_value.execute.return_value = (
         MOCK_CHANNEL_RESPONSE
@@ -63,18 +63,18 @@ def test_get_channel_data_integrity(mock_youtube):
 
 
 # lambda_handlerのオーケストレーション検証 (S3/EventBridge呼び出し)
-@patch("src.lambda.lambda_test.boto3.client")
-@patch("src.lambda.lambda_test.youtube")
+@patch("src.lambda_func.app_lambda.boto3.client")
+@patch("src.lambda_func.app_lambda.youtube")
 @patch(
-    "src.lambda.lambda_test.get_channel",
+    "src.lambda_func.app_lambda.get_channel",
     return_value=[{"channel_id": "UC_T", "data": "channel"}],
 )
 @patch(
-    "src.lambda.lambda_test.get_video",
+    "src.lambda_func.app_lambda.get_video",
     return_value=[{"video_id": "v1", "view_count": 100, "title": "Test Video"}],
 )
 @patch(
-    "src.lambda.lambda_test.get_comments_for_video", return_value=[{"comment_id": "c1"}]
+    "src.lambda_func.app_lambda.get_comments_for_video", return_value=[{"comment_id": "c1"}]
 )
 @patch.dict(
     os.environ,
