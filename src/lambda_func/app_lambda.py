@@ -7,12 +7,21 @@ from googleapiclient.discovery import build
 from aws_lambda_powertools import Logger
 
 logger = Logger()
-secretsmanager_client = boto3.client("secretsmanager")
+# secretsmanager_client = boto3.client("secretsmanager")
 
+# /////////////////
+# 環境変数読み込み
+# /////////////////
+BUCKET_NAME = os.environ.get("BUCKET_NAME")
+REGION_NAME = os.environ.get("REGION_NAME")
+SECRET_ARN = os.environ.get("YOUTUBE_API_KEY_ARN")
+EVENT_SOURCE = "my-scraper"  # 後で変更
+EVENT_DETAIL_TYPE = "ScrapingCompleted"  # 後で変更
 
 # シークレットを取得する関数
 def get_youtube_api_key(secret_arn):
     try:
+        secretsmanager_client = boto3.client("secretsmanager")
         response = secretsmanager_client.get_secret_value(SecretId=secret_arn)
         secret_data = json.loads(response["SecretString"])
 
@@ -27,28 +36,21 @@ def get_youtube_api_key(secret_arn):
         raise
 
 
-# /////////////////
-# 環境変数読み込み
-# /////////////////
-BUCKET_NAME = os.environ.get("BUCKET_NAME")
-REGION_NAME = os.environ.get("REGION_NAME")
-SECRET_ARN = os.environ.get("YOUTUBE_API_KEY_ARN")
-EVENT_SOURCE = "my-scraper"  # 後で変更
-EVENT_DETAIL_TYPE = "ScrapingCompleted"  # 後で変更
+
 
 # API KEYを取得
-try:
-    API_KEY = get_youtube_api_key(SECRET_ARN)
-    youtube = build("youtube", "v3", developerKey=API_KEY)
-except Exception as e:
-    logger.exception("初期化処理に失敗しました。Lambdaを終了します。")
-    raise e
+# try:
+#     # API_KEY = get_youtube_api_key(SECRET_ARN) # 修正しました
+#     youtube = build("youtube", "v3", developerKey=API_KEY)
+# except Exception as e:
+#     logger.exception("初期化処理に失敗しました。Lambdaを終了します。")
+#     raise e
 
 
 # /////////////////
 # チャンネル情報の取得
 # /////////////////
-def get_channel(channel_id):
+def get_channel(youtube, channel_id):
     channels_response = (
         youtube.channels().list(part="snippet,statistics", id=channel_id).execute()
     )
@@ -72,7 +74,7 @@ def get_channel(channel_id):
 # /////////////////
 # 動画情報の取得
 # /////////////////
-def get_video(channel_id):
+def get_video(youtube, channel_id):
     channels_response = (
         youtube.channels()
         .list(part="statistics, contentDetails, brandingSettings", id=channel_id)
@@ -142,7 +144,7 @@ def get_video(channel_id):
 # /////////////////
 # アップロードした動画のIDを取得
 # /////////////////
-def get_uploads_playlist_id(channel_id):
+def get_uploads_playlist_id(youtube, channel_id):
     channels_response = (
         youtube.channels().list(part="contentDetails", id=channel_id).execute()
     )
@@ -154,7 +156,7 @@ def get_uploads_playlist_id(channel_id):
 # /////////////////
 # コメント情報の取得
 # /////////////////
-def get_comments_for_video(video_id, max_comments_per_video=100):
+def get_comments_for_video(youtube, video_id, max_comments_per_video=100):
     comments_data = []
     # コメント無効か動画対策
     try:
@@ -210,9 +212,16 @@ def lambda_handler(event, context):
 
     s3 = boto3.client("s3", region_name=REGION_NAME)
 
+    try:
+        API_KEY = get_youtube_api_key(SECRET_ARN) # 修正しました
+        youtube = build("youtube", "v3", developerKey=API_KEY)
+    except Exception as e:
+        logger.exception("初期化処理に失敗しました。Lambdaを終了します。")
+        raise e
+
     # チャンネルデータの格納
     output_channel = StringIO()
-    df_channel = pd.DataFrame(get_channel(CHANNEL_ID))
+    df_channel = pd.DataFrame(get_channel(youtube, CHANNEL_ID))
     df_channel.to_json(output_channel, orient="records", lines=True, force_ascii=False)
     channel_key = f"channel={CHANNEL_ID}/workflow={current_execution_id}/raw_data/data_channel.json"
     s3.put_object(Bucket=BUCKET_NAME, Key=channel_key, Body=output_channel.getvalue())
@@ -223,7 +232,7 @@ def lambda_handler(event, context):
 
     # ビデオデータの格納
     output_video = StringIO()
-    df_videos = pd.DataFrame(get_video(CHANNEL_ID))
+    df_videos = pd.DataFrame(get_video(youtube, CHANNEL_ID))
     df_videos.to_json(output_video, orient="records", lines=True, force_ascii=False)
     video_key = (
         f"channel={CHANNEL_ID}/workflow={current_execution_id}/raw_data/data_video.json"
@@ -244,7 +253,7 @@ def lambda_handler(event, context):
         video_id = row["video_id"]
         # video_title = row["title"]
         comments = get_comments_for_video(
-            video_id, max_comments_per_video=10
+            youtube, video_id, max_comments_per_video=10
         )  # 本来は100に変更
         all_comments.extend(comments)
 
