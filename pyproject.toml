@@ -1,6 +1,0 @@
-[tool.pyright] 
-pythonPlatform = "Linux" 
-pythonVersion = "3.12" 
-
-[tool.pytest.ini_options]
-pythonpath = ["."]

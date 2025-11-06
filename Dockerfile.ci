@@ -5,6 +5,6 @@ WORKDIR /app
 COPY requirements/requirements_ci.txt .
 RUN pip install --no-cache-dir -r requirements_ci.txt
 
-COPY src /app/src
+COPY . /app
 
 CMD ["/bin/bash"]
