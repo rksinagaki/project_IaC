@@ -23,7 +23,6 @@ def delete_s3_prefix(bucket_name, prefix):
         bucket = s3.Bucket(bucket_name)
         delete_response = bucket.objects.filter(Prefix=prefix).delete()
 
-        # 削除されたオブジェクトの総数をカウント
         deleted_count = sum(len(d.get("Deleted", [])) for d in delete_response)
         logger.info(
             f"S3クリーンアップが完了しました。削除されたオブジェクト総数: {deleted_count}"
@@ -38,7 +37,6 @@ def lambda_handler(event, context):
     logger.info(f"Received cleanup event: {json.dumps(event)}")
 
     try:
-        # 情報の抽出（確認済みのシンプルなロジック）
         decoded_payload = event.get("decoded_payload")
 
         if not decoded_payload or not isinstance(decoded_payload, dict):
@@ -54,19 +52,19 @@ def lambda_handler(event, context):
             )
             return event
 
-        # 1. full_key から bucket_name を除去してS3キーを取得
+        # S3キーを取得
         if processed_base_path.startswith(bucket_name + "/"):
             full_key = processed_base_path.replace(bucket_name + "/", "", 1)
         else:
             full_key = processed_base_path
 
-        # 2. クリーンアップの基点となる親フォルダのプレフィックスを特定
+        # 親フォルダのプレフィックスを特定
         cleanup_base_prefix = full_key.split("/processed_data/")[0]
 
         final_cleanup_key = cleanup_base_prefix + "/"
         logger.info(f"Identified execution-wide cleanup key: {final_cleanup_key}")
 
-        # 3. 実行IDに関連する S3 上のすべてのデータを削除
+        # 関連する S3 上のすべてのデータを削除
         delete_s3_prefix(bucket_name, final_cleanup_key)
 
         return event

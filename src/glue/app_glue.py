@@ -13,7 +13,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 from pyspark.sql.window import Window
 
-## @params: [JOB_NAME]
+# @params: [JOB_NAME]
 args = getResolvedOptions(
     sys.argv,
     [
@@ -221,14 +221,16 @@ df_video = df_video.withColumn(
     (
         F.coalesce(
             F.regexp_extract(F.col("duration"), r"(\d+)H", 1).cast(LongType()), F.lit(0)
-        ) * 3600
-    ) + 
-    (
+        )
+        * 3600
+    )
+    + (
         F.coalesce(
             F.regexp_extract(F.col("duration"), r"(\d+)M", 1).cast(LongType()), F.lit(0)
-        ) * 60
-    ) + 
-    (
+        )
+        * 60
+    )
+    + (
         F.coalesce(
             F.regexp_extract(F.col("duration"), r"(\d+)S", 1).cast(LongType()), F.lit(0)
         )
