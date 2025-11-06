@@ -42,8 +42,9 @@ jobs:
         run: flake8 --ignore=E501,W503,F401,F403 ./src
 
       # Python単体テストの実行
-      - name: Pytestによる単体テスト
-        run: pytest tests/
+      - name: Pytestの実行
+        run: |
+          PYTHONPATH=. python3 -m pytest tests/
 
       # Terraformの検証
       - name: Terraformのセットアップ
