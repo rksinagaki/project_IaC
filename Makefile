@@ -8,4 +8,4 @@ run-container:
 		terraform-aws-env:v1.0 bash
 
 run-container-linter:
-	docker container run -it --rm -v "$(PWD)":/app my-black-linter /bin/bash
+	docker container run -it --rm -v "$(PWD)":/app ci_youtube_project /bin/bash
