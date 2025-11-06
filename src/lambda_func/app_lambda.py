@@ -242,7 +242,7 @@ def lambda_handler(event, context):
     all_comments = []
     for index, row in top_videos_df.iterrows():
         video_id = row["video_id"]
-        video_title = row["title"]
+        # video_title = row["title"]
         comments = get_comments_for_video(
             video_id, max_comments_per_video=10
         )  # 本来は100に変更
