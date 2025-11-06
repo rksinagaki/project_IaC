@@ -17,6 +17,7 @@ SECRET_ARN = os.environ.get("YOUTUBE_API_KEY_ARN")
 EVENT_SOURCE = "my-scraper"  # 後で変更
 EVENT_DETAIL_TYPE = "ScrapingCompleted"  # 後で変更
 
+
 # シークレットを取得する関数
 def get_youtube_api_key(secret_arn):
     try:
@@ -33,6 +34,7 @@ def get_youtube_api_key(secret_arn):
     except Exception as e:
         logger.error(f"予期しないエラーが発生しました: {e}")
         raise
+
 
 # /////////////////
 # チャンネル情報の取得
@@ -139,6 +141,7 @@ def get_uploads_playlist_id(youtube, channel_id):
         "uploads"
     ]
 
+
 # /////////////////
 # コメント情報の取得
 # /////////////////
@@ -179,6 +182,7 @@ def get_comments_for_video(youtube, video_id, max_comments_per_video=100):
 
     return comments_data
 
+
 # /////////////////
 # lambda関数実行
 # /////////////////
@@ -199,7 +203,7 @@ def lambda_handler(event, context):
     s3 = boto3.client("s3", region_name=REGION_NAME)
 
     try:
-        API_KEY = get_youtube_api_key(SECRET_ARN) # 修正しました
+        API_KEY = get_youtube_api_key(SECRET_ARN)  # 修正しました
         youtube = build("youtube", "v3", developerKey=API_KEY)
     except Exception as e:
         logger.exception("初期化処理に失敗しました。Lambdaを終了します。")
@@ -294,6 +298,7 @@ def lambda_handler(event, context):
     logger.info("lambdaハンドラーが完了しました。")
 
     return {"statusCode": 200, "message": "Scraping and event publication complete."}
+
 
 # 参考：EventBridgeに送信される情報の中身
 # {
