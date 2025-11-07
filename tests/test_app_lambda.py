@@ -2,8 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 import json
 import os
-from src.lambda_func.app_lambda import get_youtube_api_key, get_channel, get_video, lambda_handler
-# from src.clean_up.clean_up_lambda import delete_s3_prefix, lambda_handler
+from src.lambda_func.app_lambda import get_youtube_api_key, get_channel, lambda_handler
 
 # SecretsManagerのモック化テスト
 @patch('src.lambda_func.app_lambda.boto3.client') 
