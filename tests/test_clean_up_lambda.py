@@ -31,3 +31,26 @@ def test_delete_s3_prefix_success(mock_boto_resource):
     mock_boto_resource.return_value.Bucket.assert_called_once_with(TEST_BUCKET)
     mock_objects.filter.assert_called_once_with(Prefix=TEST_PREFIX)
     mock_filter.delete.assert_called_once()
+
+
+@patch('src.clean_up.clean_up_lambda.delete_s3_prefix')
+def test_lambda_handler_success(mock_delete_s3_prefix):
+    TEST_BUCKET = "test-processed-data-bucket"
+    TEST_PROCESSED_BASE_PATH = "test-processed-data-bucket/test_artist_slug/execution-id/processed_data/output_file.parquet"
+    EXPECTED_CLEANUP_PREFIX = "test_artist_slug/execution-id/"
+    TEST_EVENT = {
+        "decoded_payload": {
+            "bucket_name": TEST_BUCKET,
+            "processed_base_path": TEST_PROCESSED_BASE_PATH,
+        }
+    }
+    TEST_CONTEXT = MagicMock()
+
+    response = lambda_handler(TEST_EVENT, TEST_CONTEXT)
+
+    assert response == TEST_EVENT
+
+    mock_delete_s3_prefix.assert_called_once_with(
+        TEST_BUCKET,
+        EXPECTED_CLEANUP_PREFIX
+    )
