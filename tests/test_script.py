@@ -126,3 +126,6 @@ def test_lambda_handler_success(
     assert put_events_args["DetailType"] == "ScrapingCompleted"
     assert put_events_args["EventBusName"] == "youtube-pipeline-event-bus"
     assert response["statusCode"] == 200
+
+
+def test
