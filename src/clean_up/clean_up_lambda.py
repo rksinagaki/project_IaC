@@ -6,15 +6,14 @@ import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# boto3クライアントを初期化
-s3 = boto3.resource("s3")
-glue = boto3.client("glue")
-
 # 環境変数 (Glueカタログを削除する場合に利用)
 GLUE_DATABASE_NAME = os.environ.get("GLUE_DATABASE_NAME")
 
 
 def delete_s3_prefix(bucket_name, prefix):
+    # boto3クライアントを初期化
+    s3 = boto3.resource("s3")
+
     logger.info(
         f"S3バケットの削除を開始します。 ターゲットプレフィックス: s3://{bucket_name}/{prefix}"
     )
@@ -74,6 +73,7 @@ def lambda_handler(event, context):
         return event
 
 
+# Glueカタログも削除したい場合
 # def delete_glue_table(database_name, table_name):
 #     glue = boto3.client('glue')
 #     logger.info(f"Deleting Glue table: {database_name}.{table_name}")

@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 import json
 import os
 from src.lambda_func.app_lambda import get_youtube_api_key, get_channel, get_video, lambda_handler
+# from src.clean_up.clean_up_lambda import delete_s3_prefix, lambda_handler
 
 # SecretsManagerのモック化テスト
 @patch('src.lambda_func.app_lambda.boto3.client') 
@@ -103,7 +104,7 @@ def test_lambda_handler_success(
         "CHANNEL_ID": "UC_TEST_ID",
         "ARTIST_NAME_DISPLAY": "Test Artist",
         "ARTIST_NAME_SLUG": "test_artist_slug",
-        "POWERTOOLS_SERVICE_NAME": "youtube-scraper",
+        "POWERTOOLS_SERVICE_NAME": "youtube-scraper"
     }
     mock_context = MagicMock()
     mock_context.aws_request_id = "test-execution-id" 
@@ -126,6 +127,3 @@ def test_lambda_handler_success(
     assert put_events_args["DetailType"] == "ScrapingCompleted"
     assert put_events_args["EventBusName"] == "youtube-pipeline-event-bus"
     assert response["statusCode"] == 200
-
-
-def test
